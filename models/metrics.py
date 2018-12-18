@@ -76,6 +76,7 @@ class AQWV(Metric):
             output, target = paired_sort(output, target)
             output = self._cutoff(output)
             confusion = self.confusion_matrix(output, target)
+            print(confusion)
             if torch.sum(target) == 0:
                 if self.version == 'tuning':
                     # ignore both miss and false alarm when tuning
@@ -103,6 +104,8 @@ class AQWV(Metric):
         if len(self.false_alarm) == 0:
             aqwv = 0.0
         else:
+            print('misses:', self.miss)
+            print('false_alarmes:', self.false_alarm)
             aqwv = 1 - np.mean(self.miss) - self.beta * np.mean(self.false_alarm)
         if reset:
             self.reset()
