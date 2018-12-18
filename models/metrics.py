@@ -55,6 +55,9 @@ class AQWV(Metric):
                  relevant_ignored: torch.LongTensor = None,
                  irrelevant_ignored: torch.LongTensor = None) -> None:
 
+        print('outputs:', outputs)
+        print('targets:', targets)
+
         if not len(outputs.shape) == len(targets.shape):
             targets = torch.unsqueeze(targets, 1)
             targets = torch.zeros_like(outputs).scatter_(1, targets, 1)
@@ -104,8 +107,8 @@ class AQWV(Metric):
         if len(self.false_alarm) == 0:
             aqwv = 0.0
         else:
-            print('misses:', self.miss)
-            print('false_alarmes:', self.false_alarm)
+            # print('misses:', self.miss)
+            # print('false_alarmes:', self.false_alarm)
             aqwv = 1 - np.mean(self.miss) - self.beta * np.mean(self.false_alarm)
         if reset:
             self.reset()
