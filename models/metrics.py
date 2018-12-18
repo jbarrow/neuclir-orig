@@ -50,8 +50,29 @@ class AQWV(Metric):
         self.miss = []
         self.false_alarm = []
 
-    def __call__(self, outputs: torch.Tensor, targets: torch.LongTensor) -> None:
-        for output, target in zip(outputs, targets):
+    def __call__(self, outputs: torch.Tensor,
+                 targets: torch.LongTensor,
+                 relevant_ignored: torch.LongTensor = None,
+                 irrelevant_ignored: torch.LongTensor = None) -> None:
+
+        if not len(outputs.shape) == len(targets.shape):
+            targets = torch.unsqueeze(targets, 1)
+            targets = torch.zeros_like(outputs).scatter_(1, targets, 1)
+
+        if relevant_ignored is None:
+            relevant_ignored = np.zeros(outputs.shape[0])
+        else:
+            relevant_ignored = relevant_ignored.numpy()
+
+        if irrelevant_ignored is None:
+            irrelevant_ignored = np.zeros(outputs.shape[0])
+        else:
+            irrelevant_ignored = irrelevant_ignored.numpy()
+
+        for output, target, rel_ignored, irrel_ignored in zip(outputs,
+                                                              targets,
+                                                              relevant_ignored,
+                                                              irrelevant_ignored):
             output, target = paired_sort(output, target)
             output = self._cutoff(output)
             confusion = self.confusion_matrix(output, target)
@@ -61,11 +82,11 @@ class AQWV(Metric):
                     pass
                 elif self.version == 'program':
                     # ignore miss when calculating program target
-                    false_alarm = confusion[0, 1] / float(sum(confusion[0, :]))
+                    false_alarm = confusion[0, 1] / float(sum(confusion[0, :]) + irrel_ignored)
                     self.false_alarm.append(false_alarm)
             else:
-                miss = confusion[1, 0] / float(sum(confusion[1, :]))
-                false_alarm = confusion[0, 1] / float(sum(confusion[0, :]))
+                miss = (confusion[1, 0] + rel_ignored) / float(sum(confusion[1, :]) + rel_ignored)
+                false_alarm = confusion[0, 1] / float(sum(confusion[0, :]) + irrel_ignored)
                 self.false_alarm.append(false_alarm)
                 self.miss.append(miss)
 
