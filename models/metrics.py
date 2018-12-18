@@ -105,7 +105,10 @@ class AQWV(Metric):
             irrelevant_ignored = irrelevant_ignored.cpu().numpy()
 
         if masks is None:
-            masks = torch.ones_like(targets)
+            masks = torch.ones_like(targets).int()
+        else:
+            # try converting to int
+            masks = masks.int()
 
         for output, target, mask, rel_ignored, irrel_ignored in zip(outputs,
                                                                     targets,
