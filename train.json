@@ -1,0 +1,75 @@
+{
+   "dataset_reader": {
+      "scores": false,
+      "type": "letor_train_reader"
+   },
+   "iterator": {
+      "batch_size": 64,
+      "type": "basic"
+   },
+   "model": {
+      "doc_field_embedder": {
+         "tokens": {
+            "embedding_dim": 40,
+            "pretrained_file": "/storage/proj/joe/neuclir/data/cca.sw.txt",
+            "trainable": false,
+            "type": "embedding"
+         }
+      },
+      "embedding_transformer": {
+         "activations": [
+            "relu"
+         ],
+         "dropout": [
+            0.20000000000000001
+         ],
+         "hidden_dims": [
+            40
+         ],
+         "input_dim": 40,
+         "num_layers": 1
+      },
+      "query_field_embedder": {
+         "tokens": {
+            "embedding_dim": 40,
+            "pretrained_file": "/storage/proj/joe/neuclir/data/cca.en.txt",
+            "trainable": false,
+            "type": "embedding"
+         }
+      },
+      "scorer": {
+         "activations": [
+            "relu",
+            "linear"
+         ],
+         "dropout": [
+            0.20000000000000001,
+            0
+         ],
+         "hidden_dims": [
+            40,
+            1
+         ],
+         "input_dim": 80,
+         "num_layers": 2
+      },
+      "type": "letor_training"
+   },
+   "train_data_path": "/storage/proj/joe/neuclir/data/sw/train.csv",
+   "trainer": {
+      "cuda_device": -1,
+      "grad_clipping": 5,
+      "num_epochs": 40,
+      "optimizer": {
+         "lr": 0.0030000000000000001,
+         "type": "adam"
+      },
+      "patience": 10,
+      "validation_metric": "+accuracy"
+   },
+   "validation_data_path": "/storage/proj/joe/neuclir/data/sw/test.csv",
+   "validation_dataset_reader": {
+      "scores": false,
+      "type": "letor_train_reader"
+   }
+}
