@@ -25,6 +25,40 @@ class MeanAveragePrecision(Metric):
     def __call__(self, outputs: torch.Tensor, targets: torch.LongTensor):
         pass
 
+    def apk(self, actual, predicted, k=10):
+        """
+        Computes the average precision at k.
+        This function computes the average prescision at k between two lists of
+        items.
+        Parameters
+        ----------
+        actual : list
+                 A list of elements that are to be predicted (order doesn't matter)
+        predicted : list
+                    A list of predicted elements (order does matter)
+        k : int, optional
+            The maximum number of predicted elements
+        Returns
+        -------
+        score : double
+                The average precision at k over the input lists
+        """
+        if len(predicted) > k:
+            predicted = predicted[:k]
+
+        score = 0.0
+        num_hits = 0.0
+
+        for i, p in enumerate(predicted):
+            if p in actual and p not in predicted[:i]:
+                num_hits += 1.0
+                score += num_hits / (i + 1.0)
+
+        if not actual:
+            return 0.0
+
+        return score / min(len(actual), k)
+
     def get_metric(self, reset: bool = False):
         if len(self.aps) == 0:
             map = 0.0
@@ -52,6 +86,7 @@ class AQWV(Metric):
 
     def __call__(self, outputs: torch.Tensor,
                  targets: torch.LongTensor,
+                 masks: torch.LongTensor = None,
                  relevant_ignored: torch.LongTensor = None,
                  irrelevant_ignored: torch.LongTensor = None) -> None:
 
@@ -69,20 +104,23 @@ class AQWV(Metric):
         else:
             irrelevant_ignored = irrelevant_ignored.cpu().numpy()
 
-        outputs, indices = torch.sort(outputs, descending=True)
+        if masks is None:
+            masks = torch.ones_like(targets)
 
-        for output, target, indice, rel_ignored, irrel_ignored in zip(outputs,
-                                                                      targets,
-                                                                      indices,
-                                                                      relevant_ignored,
-                                                                      irrelevant_ignored):
-            # output, target = paired_sort(output, target)
-            # apply the sorted indices
-            target = target[indice]
+        for output, target, mask, rel_ignored, irrel_ignored in zip(outputs,
+                                                                    targets,
+                                                                    masks,
+                                                                    relevant_ignored,
+                                                                    irrelevant_ignored):
+            valid_docs = torch.sum(mask)
+            output, target = output[:valid_docs], target[:valid_docs]
+
+            output, target = paired_sort(output, target)
 
             output = self._cutoff(output)
+
             confusion = self.confusion_matrix(output, target)
-            # print(confusion)
+
             if torch.sum(target) == 0:
                 if self.version == 'tuning':
                     # ignore both miss and false alarm when tuning
