@@ -55,17 +55,17 @@ class AQWV(Metric):
                  relevant_ignored: torch.LongTensor = None,
                  irrelevant_ignored: torch.LongTensor = None) -> None:
 
-        print('outputs:', outputs)
-        print('outputs shape:', outputs.shape)
-        print('targets:', targets)
-        print('targets shape:', targets.shape)
+        # print('outputs:', outputs)
+        # print('outputs shape:', outputs.shape)
+        # print('targets:', targets)
+        # print('targets shape:', targets.shape)
 
         if not len(outputs.shape) == len(targets.shape):
             targets = torch.unsqueeze(targets, 1)
             targets = torch.zeros_like(outputs).scatter_(1, targets, 1)
 
-        print('targets:', targets)
-        print('targets shape:', targets.shape)
+        # print('targets:', targets)
+        # print('targets shape:', targets.shape)
 
         if relevant_ignored is None:
             relevant_ignored = np.zeros(outputs.shape[0])
@@ -84,7 +84,7 @@ class AQWV(Metric):
             output, target = paired_sort(output, target)
             output = self._cutoff(output)
             confusion = self.confusion_matrix(output, target)
-            print(confusion)
+            # print(confusion)
             if torch.sum(target) == 0:
                 if self.version == 'tuning':
                     # ignore both miss and false alarm when tuning

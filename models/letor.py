@@ -62,7 +62,7 @@ class LeToRWrapper(Model):
 
         self.metrics = {
             'accuracy': CategoricalAccuracy(),
-            'aqwv': AQWV()
+            'aqwv': AQWV(cutoff=1)
         }
 
         #self.loss = nn.MarginRankingLoss(margin=0.75)
