@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 from typing import Optional
 from overrides import overrides
@@ -11,45 +12,47 @@ class MeanAveragePrecision(Metric):
         super(MeanAveragePrecision, self).__init__()
 
         self.k = k
+        self.aps = []
 
     def __call__(self, outputs: torch.Tensor, targets: torch.LongTensor):
         pass
 
     def get_metric(self, reset: bool = False):
-        return 0.0
+        if len(self.aps) == 0:
+            map = 0.0
+        else:
+            map = np.mean(self.aps)
+        if reset:
+            self.reset()
+        return map
 
+    @overrides
     def reset(self):
-        pass
+        self.aps = []
 
 
 @Metric.register('aqwv')
 class AQWV(Metric):
-    def __init__(self, beta: float = 40., cutoff: int = 40):
+    def __init__(self, beta: float = 40., cutoff: int = 40, version: str = 'tuning') -> None:
         super(AQWV, self).__init__()
 
         self.beta = beta
         self.cutoff = cutoff
+        self.version = version
+        self.qwvs = []
 
-    def __call__(self, outputs: torch.Tensor, targets: torch.LongTensor):
+    def __call__(self, outputs: torch.Tensor, targets: torch.LongTensor) -> None:
         pass
 
-    def get_metric(self, reset: bool = False):
-        return 0.0
+    def get_metric(self, reset: bool = False) -> float:
+        if len(self.qwvs) == 0:
+            aqwv = 0.0
+        else:
+            aqwv = np.mean(self.qwvs)
+        if reset:
+            self.reset()
+        return aqwv
 
-    def reset(self):
-        pass
-
-
-@Metric.register('mrr')
-class MeanReciprocalRank(Metric):
-    def __init__():
-        pass
-
-    def __call__(self, outputs: torch.Tensor, targets: torch.LongTensor):
-        pass
-
-    def get_metric(self, reset: bool = False):
-        return 0.0
-
-    def reset(self):
-        pass
+    @overrides
+    def reset(self) -> None:
+        self.qwvs = []
