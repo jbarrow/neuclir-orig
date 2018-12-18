@@ -55,17 +55,9 @@ class AQWV(Metric):
                  relevant_ignored: torch.LongTensor = None,
                  irrelevant_ignored: torch.LongTensor = None) -> None:
 
-        # print('outputs:', outputs)
-        # print('outputs shape:', outputs.shape)
-        # print('targets:', targets)
-        # print('targets shape:', targets.shape)
-
         if not len(outputs.shape) == len(targets.shape):
             targets = torch.unsqueeze(targets, 1)
             targets = torch.zeros_like(outputs).scatter_(1, targets, 1)
-
-        # print('targets:', targets)
-        # print('targets shape:', targets.shape)
 
         if relevant_ignored is None:
             relevant_ignored = np.zeros(outputs.shape[0])
@@ -77,11 +69,15 @@ class AQWV(Metric):
         else:
             irrelevant_ignored = irrelevant_ignored.cpu().numpy()
 
-        for output, target, rel_ignored, irrel_ignored in zip(outputs,
-                                                              targets,
-                                                              relevant_ignored,
-                                                              irrelevant_ignored):
-            output, target = paired_sort(output, target)
+        indices = torch.argsort(outputs, descending=True)
+
+        for output, target, indice, rel_ignored, irrel_ignored in zip(outputs,
+                                                                      targets,
+                                                                      indices,
+                                                                      relevant_ignored,
+                                                                      irrelevant_ignored):
+            # output, target = paired_sort(output, target)
+            target = target[indice]
             output = self._cutoff(output)
             confusion = self.confusion_matrix(output, target)
             # print(confusion)
