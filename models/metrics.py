@@ -69,7 +69,7 @@ class AQWV(Metric):
         else:
             irrelevant_ignored = irrelevant_ignored.cpu().numpy()
 
-        indices = torch.argsort(outputs, descending=True)
+        outputs, indices = torch.sort(outputs, descending=True)
 
         for output, target, indice, rel_ignored, irrel_ignored in zip(outputs,
                                                                       targets,
@@ -77,7 +77,9 @@ class AQWV(Metric):
                                                                       relevant_ignored,
                                                                       irrelevant_ignored):
             # output, target = paired_sort(output, target)
+            # apply the sorted indices
             target = target[indice]
+
             output = self._cutoff(output)
             confusion = self.confusion_matrix(output, target)
             # print(confusion)
