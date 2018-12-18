@@ -62,12 +62,12 @@ class AQWV(Metric):
         if relevant_ignored is None:
             relevant_ignored = np.zeros(outputs.shape[0])
         else:
-            relevant_ignored = relevant_ignored.numpy()
+            relevant_ignored = relevant_ignored.cpu().numpy()
 
         if irrelevant_ignored is None:
             irrelevant_ignored = np.zeros(outputs.shape[0])
         else:
-            irrelevant_ignored = irrelevant_ignored.numpy()
+            irrelevant_ignored = irrelevant_ignored.cpu().numpy()
 
         for output, target, rel_ignored, irrel_ignored in zip(outputs,
                                                               targets,
@@ -91,8 +91,8 @@ class AQWV(Metric):
                 self.miss.append(miss)
 
     def confusion_matrix(self, prediction, target):
-        prediction = prediction.numpy()
-        target = target.numpy()
+        prediction = prediction.cpu().numpy()
+        target = target.cpu().numpy()
         return confusion_matrix(target, prediction, labels=[0, 1])
 
     def _cutoff(self, output):
