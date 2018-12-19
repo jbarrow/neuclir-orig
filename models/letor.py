@@ -12,7 +12,7 @@ from allennlp.modules.text_field_embedders import TextFieldEmbedder
 from allennlp.nn.util import get_text_field_mask
 
 from typing import Optional, Dict, Any
-from .metrics import MeanAveragePrecision
+from .metrics import MeanAveragePrecision, AQWV
 
 
 class DocAverager(nn.Module):
@@ -62,6 +62,7 @@ class LeToRWrapper(Model):
 
         self.metrics = {
             'accuracy': CategoricalAccuracy(),
+            'aqwv': AQWV(cutoff=1),
             'map': MeanAveragePrecision()
         }
 
