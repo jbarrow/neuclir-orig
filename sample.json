@@ -1,0 +1,51 @@
+{
+   "include_scores": true,
+   "logging": "info",
+   "n_irrelevant": 1,
+   "output": "datasets/random",
+   "strategy": "difficult",
+   "train": {
+      "docs": [
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/ANALYSIS1/audio/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/ANALYSIS1/text/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/ANALYSIS2/audio/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/ANALYSIS2/text/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/EVAL1/audio/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/EVAL1/text/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/EVAL2/audio/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/EVAL2/text/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/EVAL3/audio/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/segmented/EVAL3/text/*"
+      ],
+      "judgements": [
+         "/storage3/proj/joe/neuclir/data/so/swso/annotations/analysis_annotation1/query_annotation.tsv",
+         "/storage3/proj/joe/neuclir/data/so/swso/annotations/analysis_annotation2/query_annotation.tsv",
+         "/storage3/proj/joe/neuclir/data/so/swso/annotations/analysis_annotation3/query_annotation.tsv",
+         "/storage3/proj/joe/neuclir/data/so/swso/annotations/eval_annotation/query_annotation.tsv"
+      ],
+      "queries": [
+         "/storage3/proj/joe/neuclir/data/so/swso/queries/query1/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/queries/query2/*",
+         "/storage3/proj/joe/neuclir/data/so/swso/queries/query3/*"
+      ],
+      "scores": [
+         "/storage3/proj/joe/neuclir/data/so/swso/scores/q1_all/",
+         "/storage3/proj/joe/neuclir/data/so/swso/scores/q2q3_all/"
+      ]
+   },
+   "validation": {
+      "docs": [
+         "/storage3/proj/joe/neuclir/data/so/so/segmented/DEV/audio/*",
+         "/storage3/proj/joe/neuclir/data/so/so/segmented/DEV/text/*"
+      ],
+      "judgements": [
+         "/storage3/proj/joe/neuclir/data/so/so/annotations/dev_annotation1/query_annotation.tsv"
+      ],
+      "queries": [
+         "/storage3/proj/joe/neuclir/data/so/so/queries/query1/*"
+      ],
+      "scores": [
+         "/storage3/proj/joe/neuclir/data/so/so/scores/q1_dev/"
+      ]
+   }
+}

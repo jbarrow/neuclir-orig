@@ -1,9 +1,9 @@
-from .settings import settings
-
 from sklearn.model_selection import train_test_split
-from typing import List, Tuple, Callable, Dict
+from dataclasses import dataclass
+from typing import List, Tuple, Callable, Dict, Set
 from scipy.special import logsumexp
 from functools import reduce
+from tqdm import tqdm
 
 import pandas as pd
 import argparse
@@ -11,26 +11,13 @@ import logging
 import random
 import glob
 import json
-import csv
+import sys
 import os
 
-from dataclasses import dataclass
-
-# type aliases to make code more readable
 
 Path = str
 DocumentID = str
 QueryID = str
-
-@dataclass
-class Score:
-    document: DocumentID
-    score: float
-
-    @classmethod
-    def from_row(cls, row) -> 'Score':
-        return Score(row.doc_id, row.score)
-
 
 def read_scores_file(file: Path) -> pd.DataFrame:
     try:
@@ -44,9 +31,6 @@ def read_scores(path: Path) -> pd.DataFrame:
     return pd.concat(
         [read_scores_file(qf) for qf in glob.glob(os.path.join(path, '*.trec'))])
 
-def read_judgements(file: Path) -> pd.DataFrame:
-    return pd.read_csv(file, sep='\t')
-
 def read_tokens(filename: Path, flatten: bool = True, is_json: bool = True) -> List[str]:
     tokens = []
     with open(filename) as fp:
@@ -54,9 +38,9 @@ def read_tokens(filename: Path, flatten: bool = True, is_json: bool = True) -> L
             ts = []
             if is_json:
                 l = json.loads(line)
-                ts = [w['word'] for w in l[0]] if len(l) > 0 else []
+                ts = [w['word'].lower() for w in l[0]] if len(l) > 0 else []
             else:
-                ts = line.strip().split()
+                ts = line.strip().lower().split()
             tokens.extend(ts) if flatten else tokens.append(ts)
     return tokens
 
@@ -64,42 +48,24 @@ def read_query(filename: Path) -> List[str]:
     with open(filename) as fp:
         query = json.load(fp)
     return query['english']['words'].strip().split()
-    # return query['english']['words'] + query['english']['expanded']['expanded_words']
-    # query['translations'][1]['translation']
 
 # the sampling functions take the dataframe and the index of the given document
 # and returns the index of the sampled document according to its sampling
 # strategy
 
-def sample_difficult(df: pd.DataFrame, doc: int, n: int = 1) -> List[int]:
+def sample_random(docs: Set[str], n: int = 1) -> List[str]:
     """
     The sample_difficult strategy attempts to find documents whose scores are
     close to each other to sample.
     """
-    ixs = df.index.astype(int)
-    pos = doc - ixs[0]
+    return random.sample(docs, n)
 
-    return random.sample(set(df.head(pos+100).index.astype(int)) - set([doc]), n)
-
-def sample_random(df: pd.DataFrame, doc: int, n: int = 1) -> List[int]:
+def sample_pooled(df: pd.DataFrame, n: int = 1) -> List[str]:
     """
     The sample_random strategy just randomly samples documents independent
     """
-    return random.sample(set(df.index.astype(int)) - set([doc]), n)
+    return  [(df.iloc[sample].doc_id) for sample in random.sample(set(range(len(df))), n)]
 
-# we then use the sampling strategy to sample document pairs
-
-def sample_document_pairs(
-        df: pd.DataFrame, n: int = 2,
-        fsample: Callable[[pd.DataFrame, int, int], List[int]] = sample_random)\
-            -> List[Tuple[QueryID, Score, List[Score]]]:
-    sampled_pairs = []
-    for positive in df[df['relevant'] == 1].itertuples():
-        ix = positive.Index
-        sampled = fsample(df[df['query_id'] == positive.query_id], ix)
-        sampled = [Score.from_row(df.iloc[sample])  for sample in sampled]
-        sampled_pairs.append((positive.query_id, Score.from_row(positive), sampled))
-    return sampled_pairs
 
 # when constructing the document and query pairs we need to map the names
 # to a file:
@@ -114,79 +80,155 @@ def dict_from_paths(paths: List[Path], strip_file: bool = True) -> Dict[str, Pat
     return output
 
 # normalization functions
-
-def sum_to_one(gamma):
-    pass
-
 def flatten(l_of_ls):
     return [i for l in l_of_ls for i in l]
 
 _dispatch = {
     'random': sample_random,
-    'difficult': sample_difficult
+    'pooled': sample_pooled,
+#    'pooled_plus': sample_pooled_plus
 }
 
+def read_judgements(file: Path) -> pd.DataFrame:
+    judgements = pd.read_csv(file, sep='\t')
+    judgements['relevant'] = 1
+    return judgements
+
+def get_score(df: pd.DataFrame, doc_id: str) -> float:
+    found = df[df.doc_id == doc_id]
+    if len(found) == 0:
+        if len(df) == 0:
+            return -100.
+        return min(df.score)
+    return found.score.values[0]
+
+def get_relevant(df: pd.DataFrame, doc_id: str) -> int:
+    found = df[df.doc_id == doc_id]
+    if len(found) == 0:
+        return 0
+    return 1
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.getLevelName(settings['logging'].upper()))
+    settings = json.load(open('sample.json'))
+    # set up the logger
+    logging_level = settings.pop('logging', 'info').upper()
+    logging.basicConfig(level=logging.getLevelName(logging_level))
+    # get the basic settings
+    strategy = settings.pop('strategy', 'random')
+    include_scores = settings.pop('include_scores', False)
+    n_irrelevant = settings.pop('n_irrelevant', 1)
+    output = settings.pop('output', '/tmp/data')
 
-    # read in all the IARPA relevance judgements files
-    judgements = pd.DataFrame()
-    for js in settings['judgements']:
-        j_file = os.path.join(settings['base_dir'], js, 'query_annotation.tsv')
-        logging.log(logging.INFO, f' * Reading judgments from: {j_file}')
-        judgements = pd.concat([judgements, read_judgements(j_file)], sort=False)
-        judgements['relevant'] = 1
-    logging.log(logging.INFO, f' * Total Relevance Judgements: {judgements.shape[0]}')
+    scores, judgements, datasets = {}, {}, {}
+    queries, docs = {}, {}
 
-    # read in all the system score files
-    scores = pd.DataFrame()
-    for ss in settings['scores']:
-        score_dir = os.path.join(settings['base_dir'], ss)
-        logging.log(logging.INFO, f' * Reading trec scores from {score_dir}')
-        scores = pd.concat([scores, read_scores(score_dir)], sort=False)
+    # load data for each dataset
+    for dataset in ['train', 'test', 'validation']:
+        # get the settings for the dataset
+        datasets[dataset] = settings.pop(dataset, None)
+        # if the user didn't provide settings, we simply skip it
+        if datasets[dataset] is None:
+            datasets.pop(dataset)
+            continue
+        logging.log(logging.INFO, f'Preparing the {dataset} dataset:')
+        # read in all the judgements
+        logging.log(logging.INFO, ' * Reading in relevance judgements')
+        judgement_files = datasets[dataset].pop('judgements', [])
+        judgements[dataset] = pd.concat([read_judgements(f) for f in judgement_files])
+        logging.log(logging.INFO, f' * Read in {len(judgements[dataset])} total judgements')
+        # determine which queries actually have any relevance judgements
+        queries_with_judgements = pd.DataFrame({'query_id': sorted(set(judgements[dataset].query_id))})
+        logging.log(logging.INFO, f' * There are {len(queries_with_judgements)} total queries with judgements')
+        # read in all the INDRI scores
+        score_files = datasets[dataset].pop('scores', [])
+        # ensure that we either have score files or don't need them
+        if len(score_files) > 0:
+            logging.log(logging.INFO, ' * Reading in INDRI scores')
+            scores[dataset] = pd.concat([read_scores(f) for f in score_files], sort=False)
+            logging.log(logging.INFO, f' * Read in {len(scores[dataset])} total scores')
+        elif (strategy == 'difficult' and dataset == 'train') or dataset == 'validation':
+            logging.log(logging.ERROR, 'Scores were needed but not provided')
+            sys.exit(-1)
+        # load in the possible queries
+        queries[dataset] = dict_from_paths(datasets[dataset]['queries'])
+        logging.log(logging.INFO, f' * Found {len(queries[dataset])} queries')
+        # load in the possible documents
+        docs[dataset] = dict_from_paths(datasets[dataset]['docs'])
+        logging.log(logging.INFO, f' * Found {len(docs[dataset])} docs')
 
-    queries_with_judgements = pd.DataFrame({'query_id': sorted(set(judgements.query_id))})
+    # generate the train dataset
+    if 'train' in datasets.keys():
+        out_fp = open(os.path.join(output, 'train.json'), 'w')
+        # when generating a training set, we want to associate each relevant
+        # (query, doc) pair with one or more irrelevant (query, doc) pairs.
+        for query, df in tqdm(judgements['train'].groupby('query_id')):
+            query_text = read_query(queries['train'][query])
+            query_scores = scores['train'][scores['train']['query_id'] == query]
+            # if we choose a sampling strategy that requires it
+            if strategy in ['pooled']:
+                # exclude relevant docs
+                relevant = query_scores['doc_id'].isin(list(df.doc_id))
+                possible = query_scores[~relevant]
+            all_docs = set(docs['train'].keys()) - set(df.doc_id)
+            # sample irrelevant docs for every relevant doc
+            for judgement in df.itertuples():
+                # sample a position to put the relevant document in
+                position = random.randint(0, n_irrelevant)
+                # sample paired documents
+                if strategy == 'pooled' and len(possible) > n_irrelevant:
+                    sampled_docs = sample_pooled(possible, n_irrelevant)
+                else:
+                    sampled_docs = sample_random(all_docs, n_irrelevant)
+                # get the tokens for the documents
+                relevant = {
+                    'text': ' '.join(read_tokens(docs['train'][judgement.doc_id])),
+                    'score': get_score(query_scores, judgement.doc_id)
+                }
+                # get the tokens for the irrelevant documents
+                irrelevant = [{
+                    'text': ' '.join(read_tokens(docs['train'][doc_id])),
+                    'score': get_score(query_scores, doc_id)
+                } for doc_id in sampled_docs]
 
-    # merge the files where the query_id and doc_id both exist
-    logging.log(logging.INFO, f' * Merging scores and judgement data')
-    merged = scores.merge(judgements, how='left', on=['query_id', 'doc_id'])\
-                .fillna(0)\
-                .merge(queries_with_judgements, how='right', on='query_id')\
-                .dropna()
-    merged['relevant'] = merged['relevant'].apply(int)
-    total_samples = (merged['relevant'] == 1).sum()
+                # generate the output json line
+                outline = json.dumps({
+                    'query': ' '.join(query_text),
+                    'docs': irrelevant[:position] + [relevant] + irrelevant[position:],
+                    'relevant': position
+                })
+                # write the line to the json file
+                out_fp.write(outline + '\n')
+        out_fp.close()
 
-    logging.log(logging.INFO, f' * Sampling {total_samples} relevant/irrelevant pairs')
-    sampled = sample_document_pairs(merged, fsample=_dispatch[settings['strategy']])
+    # generate the validation dataset
+    if 'validation' in datasets.keys():
+        out_fp = open(os.path.join(output, 'validation.json'), 'w')
+        # when generating a validation set, our goal is to rerank, so we want
+        # to load in all scores for a given query, up to, say, 100.
+        for query, df in tqdm(scores['validation'].groupby('query_id')):
+            query_text = read_query(queries['validation'][query])
+            relevant = judgements['validation'][judgements['validation']['query_id'] == query]
+            # compute the number of relevant docs that we missed
+            ignored_relevant = len(set(relevant.doc_id) - set(df.doc_id))
+            ignored_irrelevant = len(docs['validation']) - len(df) - ignored_relevant
+            scored_docs = []
+            # only look at the 100 most relevant documents (we'll change this later)
+            for row in df.itertuples():
+                scored_docs.append({
+                    'text': ' '.join(read_tokens(docs['validation'][row.doc_id])),
+                    'score': row.score,
+                    'relevant': get_relevant(relevant, row.doc_id)
+                })
+            # write a single query
+            outline = json.dumps({
+                'query': ' '.join(query_text),
+                'docs': scored_docs,
+                'ignored_relevant': ignored_relevant,
+                'ignored_irrelevant': ignored_irrelevant
+            })
+            out_fp.write(outline + '\n')
 
-    logging.log(logging.INFO, f' * Loading files')
-    query_map = dict_from_paths([os.path.join(settings['base_dir'], p, '*') for p in settings['queries']])
-    logging.log(logging.INFO, f' * {len(query_map)} total queries')
-    doc_map = dict_from_paths([os.path.join(settings['base_dir'], p, '*') for p in settings['docs']])
-    logging.log(logging.INFO, f' * {len(doc_map)} total text docs')
-    audio_map = dict_from_paths([os.path.join(settings['base_dir'], p, '*') for p in settings['audio']])
-    logging.log(logging.INFO, f' * {len(audio_map)} total audio docs')
-    # combine the audio files and docs
-    doc_map.update(audio_map)
+        out_fp.close()
 
-    sampled_train, sampled_test = train_test_split(sampled,
-        train_size=settings['splits']['training'])
-
-    for lst, filename in [(sampled_train, 'train.csv'), (sampled_test, 'test.csv')]:
-        print(os.path.join(settings['output'], filename))
-
-        with open(os.path.join(settings['output'], filename), 'w') as fp:
-            writer = csv.writer(fp, delimiter='\t')
-            writer.writerow(['query', 'relevant_ix', 'd1', 's1', 'd2', 's2'])
-            for query, relevant, irrelevant in lst:
-                q_tokens = read_query(query_map[query])
-                r_tokens = (read_tokens(doc_map[relevant.document], is_json='audio' not in doc_map[relevant.document]), relevant.score)
-                i_tokens = [(read_tokens(doc_map[i.document], is_json='audio' not in doc_map[i.document]), i.score) for i in irrelevant]
-                position = random.randint(0, len(i_tokens))
-
-                tokens = i_tokens[:position] + [r_tokens] + i_tokens[position:]
-
-                writer.writerow(
-                    [' '.join(q_tokens), position] + flatten([[' '.join(t), score] for t, score in tokens])
-                )
+    # eventually we'll want to compute a test set, which doesn't have any
+    # labeled documents and only consumes scores
