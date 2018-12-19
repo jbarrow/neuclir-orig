@@ -22,10 +22,34 @@ class MeanAveragePrecision(Metric):
         self.k = k
         self.aps = []
 
-    def __call__(self, outputs: torch.Tensor, targets: torch.LongTensor):
-        pass
+    def __call__(self, outputs: torch.Tensor,
+                 targets: torch.LongTensor,
+                 masks: torch.LongTensor = None,
+                 relevant_ignored: torch.LongTensor = None):
+        if not len(outputs.shape) == len(targets.shape):
+            targets = torch.unsqueeze(targets, 1)
+            targets = torch.zeros_like(outputs).scatter_(1, targets, 1)
 
-    def apk(self, actual, predicted, k=10):
+        if relevant_ignored is None:
+            relevant_ignored = np.zeros(outputs.shape[0])
+        else:
+            relevant_ignored = relevant_ignored.cpu().numpy()
+
+        if masks is None:
+            masks = torch.ones_like(targets).int()
+        else:
+            # try converting to int
+            masks = masks.int()
+
+        for output, target, mask, rel in zip(outputs, targets, masks, relevant_ignored):
+            valid_docs = torch.sum(mask)
+            output, target = output[:valid_docs], target[:valid_docs]
+            output, target = paired_sort(output, target)
+            predicted = np.arange(output.shape[0])
+            actual = set(torch.nonzero(target).view(-1).cpu().numpy().tolist())
+            self.aps.append(self.apk(actual, predicted, rel))
+
+    def apk(self, actual, predicted, rel):
         """
         Computes the average precision at k.
         This function computes the average prescision at k between two lists of
@@ -43,8 +67,8 @@ class MeanAveragePrecision(Metric):
         score : double
                 The average precision at k over the input lists
         """
-        if len(predicted) > k:
-            predicted = predicted[:k]
+        if len(predicted) > self.k:
+            predicted = predicted[:self.k]
 
         score = 0.0
         num_hits = 0.0
@@ -57,7 +81,7 @@ class MeanAveragePrecision(Metric):
         if not actual:
             return 0.0
 
-        return score / min(len(actual), k)
+        return score / (min(len(actual), k) + rel)
 
     def get_metric(self, reset: bool = False):
         if len(self.aps) == 0:
