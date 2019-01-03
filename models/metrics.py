@@ -1,3 +1,4 @@
+import json
 import torch
 import numpy as np
 
@@ -50,23 +51,6 @@ class MeanAveragePrecision(Metric):
             self.aps.append(self.apk(actual, predicted, rel))
 
     def apk(self, actual, predicted, rel):
-        """
-        Computes the average precision at k.
-        This function computes the average prescision at k between two lists of
-        items.
-        Parameters
-        ----------
-        actual : list
-                 A list of elements that are to be predicted (order doesn't matter)
-        predicted : list
-                    A list of predicted elements (order does matter)
-        k : int, optional
-            The maximum number of predicted elements
-        Returns
-        -------
-        score : double
-                The average precision at k over the input lists
-        """
         if len(predicted) > self.k:
             predicted = predicted[:self.k]
 
@@ -99,14 +83,29 @@ class MeanAveragePrecision(Metric):
 
 @Metric.register('aqwv')
 class AQWV(Metric):
-    def __init__(self, beta: float = 40., cutoff: int = 40, version: str = 'tuning') -> None:
+    def __init__(self, corrections_file: Optional[str] = None,
+                 beta: float = 40., cutoff: int = 40, version: str = 'tuning') -> None:
         super(AQWV, self).__init__()
 
         self.beta = beta
         self.cutoff = cutoff
         self.version = version
-        self.miss = []
-        self.false_alarm = []
+        self.q_ignored_relevant = 0
+        self.q_no_scores = 0
+
+        if corrections_file is not None:
+            with open(corrections_file) as fp:
+                for line in fp:
+                    q = json.loads(line)
+                    self.q_no_scores += 1
+                    if q['ignored_relevant'] > 0:
+                        self.q_ignored_relevant += 1
+
+        print(self.q_ignored_relevant, self.q_no_scores)
+
+        self.miss = [1.,]*self.q_ignored_relevant
+        self.false_alarm = [0.,]*(self.q_no_scores)
+
 
     def __call__(self, outputs: torch.Tensor,
                  targets: torch.LongTensor,
@@ -148,7 +147,7 @@ class AQWV(Metric):
 
             confusion = self.confusion_matrix(output, target)
 
-            if torch.sum(target) == 0:
+            if torch.sum(target).cpu().numpy() + rel_ignored == 0:
                 if self.version == 'tuning':
                     # ignore both miss and false alarm when tuning
                     pass
@@ -175,8 +174,8 @@ class AQWV(Metric):
         if len(self.false_alarm) == 0:
             aqwv = 0.0
         else:
-            # print('misses:', self.miss)
-            # print('false_alarmes:', self.false_alarm)
+            #print('misses:', self.miss)
+            #print('false_alarms:', self.false_alarm)
             aqwv = 1 - np.mean(self.miss) - self.beta * np.mean(self.false_alarm)
         if reset:
             self.reset()
@@ -184,5 +183,5 @@ class AQWV(Metric):
 
     @overrides
     def reset(self) -> None:
-        self.miss = []
-        self.false_alarm = []
+        self.miss = [1.,]*self.q_ignored_relevant
+        self.false_alarm = [0.,]*(self.q_no_scores)
