@@ -8,7 +8,7 @@ local Pathify(relative_path, base) = base + relative_path;
   datasets: {
     train: {
       type: "paired",
-      n_irrelevant: 4,
+      n_irrelevant: 1,
       strategy: "random",
       scores: {
         smt: [ Pathify("swso/scores/q1_all/", base), Pathify("swso/scores/q2q3_all/", base) ]
@@ -35,7 +35,7 @@ local Pathify(relative_path, base) = base + relative_path;
     },
     validation_paired: {
       type: "paired",
-      n_irrelevant: 4,
+      n_irrelevant: 1,
       strategy: "random",
       scores: {
         psq: Pathify("so/scores/q1_dev/systems/somali-customPSQ-Q1-DEV/query-analyzer-umd-v10.2_matching-umd-v11.0_evidence-combination-v11.2/SO_QUERY1_DEV_customPSQ_Cutoff2/UMD-CLIR-workQMDir-customPSQ/", base),
@@ -62,7 +62,7 @@ local Pathify(relative_path, base) = base + relative_path;
       ]
     }
   },
-  systems: ['smt'],
-  output: "datasets/random",
+  systems: ["smt"],
+  output: "datasets/normalized",
   logging: "info"
 }

@@ -1,4 +1,5 @@
 from sklearn.model_selection import train_test_split
+from scipy.misc import logsumexp
 from dataclasses import dataclass
 from collections import defaultdict
 from typing import List, Tuple, Callable, Dict, Set, Any, Union
@@ -25,13 +26,23 @@ def dict_from_paths(paths: List[Path], strip_file: bool = True) -> Dict[str, Pat
     for path in paths:
         for f in glob.glob(path):
             filename = os.path.basename(f)
-            filename = os.path.splitext(filename)[0] if strip_file else filename
+            #filename = os.path.splitext(filename)[0] if strip_file else filename
+            filename = filename.split('.')[0] if strip_file else filename
             output[filename] = f
     return output
 
 # normalization functions
 def flatten(l_of_ls):
     return [i for l in l_of_ls for i in l]
+
+def sto_normalization(df: pd.DataFrame) -> pd.DataFrame:
+    if df.score.values.dtype != 'float64':
+        return df
+    df.score = df.score.values - logsumexp(df.score.values)
+    return df
+
+def no_normalization(df: pd.DataFrame) -> pd.DataFrame:
+    return df
 
 class DatasetGenerator(object):
     def __init__(self, name: str, params: Dict[str, Any], output: Path, systems: List[str] = []):
@@ -50,8 +61,11 @@ class DatasetGenerator(object):
             df = pd.read_csv(file, sep='\t', header=None,
                 names=['query_id', 'Q0', 'document_id', 'rank', 'score', 'system'],
                 usecols=['document_id', 'score'])
+            #df = pd.read_csv(file, sep='\t')
             # get the query id from the header
             q_id = os.path.splitext(os.path.basename(file))[0][2:]
+            #q_id = pd.columns.values[0]
+            #df.columns = ['document_id', 'score']
 
             return q_id, df
         except pd.errors.EmptyDataError:
@@ -64,6 +78,7 @@ class DatasetGenerator(object):
         document-level scores for each system.
         """
         scores = defaultdict(dict)
+
         for system, paths in systems.items():
             if type(paths) != list:
                 paths = [paths]
@@ -75,7 +90,6 @@ class DatasetGenerator(object):
                         scores[query][system] = score_df
                     else:
                         scores[query][system] = pd.concat([scores[query][system], score_df])
-
         return scores
 
     def read_query(self, filename: Path, query_type: str = 'words') -> List[str]:
@@ -108,7 +122,7 @@ class DatasetGenerator(object):
             df = scores[system]
 
             found = df[df.document_id == doc_id]
-            score = -100.
+            score = -10.
             if len(found) == 0 and len(df) > 0:
                 score = min(df.score)
             elif len(found) > 0:
@@ -127,6 +141,8 @@ class DatasetGenerator(object):
         # get the system scores
         logging.log(logging.INFO, ' * Reading in score files')
         self.scores = self.read_scores(self.params['scores'])
+
+        self.scores = self.normalize(self.scores)
         # get the relevance judgements
         logging.log(logging.INFO, ' * Reading in relevance judgements')
         judgement_files = self.params.pop('judgements', [])
@@ -143,8 +159,16 @@ class DatasetGenerator(object):
         # # impose an order on the systems
         # self.systems = sorted(self.params['scores'].keys())
 
-    def normalize(self, scores: pd.DataFrame) -> pd.DataFrame:
-        return scores
+    def normalize(self, queries: Dict[str, Dict[str, pd.DataFrame]],
+                  f_normalization: Callable[[pd.DataFrame], pd.DataFrame] = sto_normalization) -> Dict[str, Dict[str, pd.DataFrame]]:
+        normalized = {}
+
+        for query, scores in queries.items():
+            normalized[query] = {}
+            for system, df in scores.items():
+                normalized[query][system] = f_normalization(df)
+
+        return normalized
 
     def sample_dataset(self):
         pass
@@ -172,6 +196,8 @@ class PairedDatasetGenerator(DatasetGenerator):
         # (query, doc) pair with one or more irrelevant (query, doc) pairs.
         with tqdm(total=len(self.judgements)) as pbar:
             for query, df in self.judgements.groupby('query_id'):
+                if query not in self.scores:
+                    continue
                 query_text = self.read_query(self.queries[query])
                 query_scores = self.scores[query]
                 # if we choose a sampling strategy that requires it
@@ -183,7 +209,8 @@ class PairedDatasetGenerator(DatasetGenerator):
                 # sample irrelevant docs for every relevant doc
                 for judgement in df.itertuples():
                     # sample a position to put the relevant document in
-                    position = random.randint(0, self.params['n_irrelevant'])
+                    #position = random.randint(0, self.params['n_irrelevant'])
+                    position = [random.randint(0, 1) for i in range(self.params['n_irrelevant'])]
                     # sample paired documents
                     # if strategy == 'pooled' and len(possible) > n_irrelevant:
                     #     sampled_docs = sample_pooled(possible, n_irrelevant)
@@ -191,23 +218,26 @@ class PairedDatasetGenerator(DatasetGenerator):
                     sampled_docs = s_random(all_docs, self.params['n_irrelevant'])
                     # get the tokens for the documents
                     relevant = {
-                        'text': ' '.join(self.read_tokens(self.docs[judgement.doc_id])),
+                        'text': ' '.join(self.read_tokens(self.docs[judgement.doc_id], is_json=False)),
                         'scores': self.get_scores(query_scores, judgement.doc_id)
                     }
                     # get the tokens for the irrelevant documents
                     irrelevant = [{
-                        'text': ' '.join(self.read_tokens(self.docs[doc_id])),
+                        'text': ' '.join(self.read_tokens(self.docs[doc_id], is_json=False)),
                         'scores': self.get_scores(query_scores, doc_id)
                     } for doc_id in sampled_docs]
 
-                    # generate the output json line
-                    outline = json.dumps({
-                        'query': ' '.join(query_text),
-                        'docs': irrelevant[:position] + [relevant] + irrelevant[position:],
-                        'relevant': position
-                    })
-                    # write the line to the json file
-                    out_fp.write(outline + '\n')
+                    for p, i in zip(position, irrelevant):
+                        ordered_docs = [i, relevant] if p == 1 else [relevant, i]
+                        # generate the output json line
+                        outline = json.dumps({
+                            'query': ' '.join(query_text),
+                            #'docs': irrelevant[:position] + [relevant] + irrelevant[position:],
+                            'docs': ordered_docs,
+                            'relevant': p
+                        })
+                        # write the line to the json file
+                        out_fp.write(outline + '\n')
                     pbar.update(1)
         out_fp.close()
 
@@ -242,7 +272,7 @@ class RerankingDatasetGenerator(DatasetGenerator):
                 for doc in docs:
                     scored_docs.append({
                         'document_id': doc,
-                        'text': ' '.join(self.read_tokens(self.docs[doc])),
+                        'text': ' '.join(self.read_tokens(self.docs[doc], is_json=False)),
                         'scores': self.get_scores(dfs, doc),
                         'relevant': self.get_relevant(relevant, doc)
                     })

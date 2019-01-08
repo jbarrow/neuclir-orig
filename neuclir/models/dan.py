@@ -10,31 +10,32 @@ from allennlp.nn.initializers import InitializerApplicator
 from allennlp.nn.regularizers import RegularizerApplicator
 from allennlp.modules.text_field_embedders import TextFieldEmbedder
 from allennlp.nn.util import get_text_field_mask
+from allennlp.modules.seq2vec_encoders.seq2vec_encoder import Seq2VecEncoder
+from allennlp.modules.seq2vec_encoders.boe_encoder import BagOfEmbeddingsEncoder
 
 from typing import Optional, Dict, Any
-from .metrics import MeanAveragePrecision, AQWV
+from ..metrics import AQWV
 
+# class DocAverager():
+#     def __init__(self) -> None:
+#         super(DocAverager, self).__init__()
+#
+#     def forward(self,
+#                 tensor: torch.Tensor,
+#                 mask: torch.LongTensor):
+#         summed = tensor.sum(2)
+#         return summed / mask.sum(2).float().unsqueeze(2).repeat(1, 1, summed.shape[2])
+#
 
-class DocAverager(nn.Module):
-    def __init__(self) -> None:
-        super(DocAverager, self).__init__()
-
-    def forward(self,
-                tensor: torch.Tensor,
-                mask: torch.LongTensor):
-        summed = tensor.sum(2)
-        return summed / mask.sum(2).float().unsqueeze(2).repeat(1, 1, summed.shape[2])
-
-
-class QueryAverager(nn.Module):
-    def __init__(self) -> None:
-        super(QueryAverager, self).__init__()
-
-    def forward(self,
-                tensor: torch.Tensor,
-                mask: torch.LongTensor):
-        summed = tensor.sum(1)
-        return summed / mask.sum(1).float().unsqueeze(1).repeat(1, summed.shape[1])
+# class QueryAverager(nn.Module):
+#     def __init__(self) -> None:
+#         super(QueryAverager, self).__init__()
+#
+#     def forward(self,
+#                 tensor: torch.Tensor,
+#                 mask: torch.LongTensor):
+#         summed = tensor.sum(1)
+#         return summed / mask.sum(1).float().unsqueeze(1).repeat(1, summed.shape[1])
 
 
 @Model.register('letor_training')
@@ -43,11 +44,14 @@ class LeToRWrapper(Model):
                  vocab: Vocabulary,
                  query_field_embedder: TextFieldEmbedder,
                  doc_field_embedder: TextFieldEmbedder,
-                 document_transformer: FeedForward,
+                 doc_transformer: FeedForward,
                  query_transformer: FeedForward,
                  scorer: FeedForward,
-                 doc_encoder: nn.Module = DocAverager(),
-                 query_encoder: nn.Module = QueryAverager(),
+                 total_scorer: FeedForward,
+                 doc_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50), #
+                 #doc_encoder: nn.Module = QueryAverager(),
+                 query_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50), #
+                 #query_encoder: nn.Module = QueryAverager(),
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
                  aqwv_corrections: Optional[str] = None) -> None:
@@ -55,10 +59,11 @@ class LeToRWrapper(Model):
 
         self.query_field_embedder = query_field_embedder
         self.doc_field_embedder = doc_field_embedder
-        self.document_transformer = document_transformer
+        self.document_transformer = doc_transformer
         self.query_transformer = query_transformer
 
         self.scorer = scorer
+        self.total_scorer = total_scorer
         #self.scorer_norm = nn.BatchNorm1d(1)
         self.doc_encoder = doc_encoder
         #self.doc_norm = nn.BatchNorm2d(100)
@@ -66,17 +71,18 @@ class LeToRWrapper(Model):
         #self.query_norm = nn.BatchNorm1d(100)
         self.initializer = initializer
         self.regularizer = regularizer
+        #self.score_dropout = nn.Dropout(0.05)
 
         self.metrics = {
             'accuracy': CategoricalAccuracy(),
-            #'aqwv_2': AQWV(corrections_file=aqwv_corrections, cutoff=2, version='program'),
-            #'aqwv_3': AQWV(corrections_file=aqwv_corrections, cutoff=3, version='program')
+            'aqwv_2': AQWV(corrections_file=aqwv_corrections, cutoff=2, version='program'),
+            'aqwv_3': AQWV(corrections_file=aqwv_corrections, cutoff=3, version='program')
         }
 
         self.training_metrics = {
             True: ['accuracy'],
-            False: ['accuracy']
-            #False: ['aqwv_2', 'aqwv_3']
+            #False: ['accuracy']
+            False: ['aqwv_2', 'aqwv_3']
         }
 
         #self.loss = nn.MarginRankingLoss(margin=0.5)
@@ -107,8 +113,14 @@ class LeToRWrapper(Model):
         # (batch_size, num_docs, doc_length, transform_dim)
         ds_transformed = self.document_transformer(ds_embedded)
         #ds_transformed = self.doc_norm(ds_transformed)
-        # (batch_size, num_docs, transform_dim)
+        batch_size, num_docs, doc_length, transform_dim = ds_transformed.shape
+        # (batch_size * num_docs, doc_length, transform_dim)
+        ds_transformed = ds_transformed.view(batch_size*num_docs, doc_length, transform_dim)
+        ds_mask = ds_mask.view(batch_size*num_docs, doc_length)
+        # (batch_size * num_docs, transform_dim)
         ds_encoded = self.doc_encoder(ds_transformed, ds_mask)
+        # (batch_size, num_docs, transform_dim)
+        ds_encoded = ds_encoded.view(batch_size, num_docs, transform_dim)
 
         # (batch_size, query_length)
         qs_mask = get_text_field_mask(query)
@@ -125,12 +137,17 @@ class LeToRWrapper(Model):
         # (batch_size, num_docs, transform_dim * 2)
         qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded], dim=2)
 
+        semantic_scores = self.scorer(qd)
+        #semantic_scores = self.score_dropout(semantic_scores)
+
         if scores is not None:
             # (batch_size, num_docs, transform_dim * 2 + 1)
-            qd = torch.cat([qd, scores], dim=2)
+            semantic_scores = torch.cat([semantic_scores, scores], dim=2)
+
+        # dropout the scores for robustness
 
         # (batch_size, num_docs)
-        logits = self.scorer(qd)
+        logits = self.total_scorer(semantic_scores)
         #logits = self.scorer_norm(logits)
         logits = logits.squeeze(2)
         # logits = self.scorer(scores).squeeze(2)
@@ -141,17 +158,17 @@ class LeToRWrapper(Model):
 
         if labels is not None:
             # filter out to only the metrics we care about
-            #if self.training:
+            if self.training:
                 #print(labels.float().shape, scores.shape)
                 #loss = self.loss(logits[:, 0], logits[:, 1], labels.float()*-2.+1.)
-            loss = self.loss(logits, labels.squeeze(-1).long())
-            self.metrics['accuracy'](logits, labels.squeeze(-1))
-            #else:
-            #    # at validation time, we can't compute a proper loss
-            #    loss = torch.Tensor([0.])
-            #    for metric in self.training_metrics[False]:
-            #        #print(relevant_ignored.squeeze(), irrelevant_ignored.squeeze(), ls_mask.sum(dim=1).squeeze())
-            #        self.metrics[metric](logits, labels.squeeze(-1).long(), ls_mask, relevant_ignored, irrelevant_ignored)
+                loss = self.loss(logits, labels.squeeze(-1).long())
+                self.metrics['accuracy'](logits, labels.squeeze(-1))
+            else:
+               # at validation time, we can't compute a proper loss
+               loss = torch.Tensor([0.])
+               for metric in self.training_metrics[False]:
+                   #print(relevant_ignored.squeeze(), irrelevant_ignored.squeeze(), ls_mask.sum(dim=1).squeeze())
+                   self.metrics[metric](logits, labels.squeeze(-1).long(), ls_mask, relevant_ignored, irrelevant_ignored)
             # metrics = [value for name, value in self.metrics.items() if name in self.training_metrics[self.training]]
             # for metric in metrics:
             #     metric(logits, labels.squeeze(-1))
