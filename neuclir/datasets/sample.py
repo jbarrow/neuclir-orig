@@ -63,7 +63,8 @@ class DatasetGenerator(object):
                 usecols=['document_id', 'score'])
             #df = pd.read_csv(file, sep='\t')
             # get the query id from the header
-            q_id = os.path.splitext(os.path.basename(file))[0][2:]
+            #q_id = os.path.splitext(os.path.basename(file))[0][2:]
+            df.query_id.ix[0]
             #q_id = pd.columns.values[0]
             #df.columns = ['document_id', 'score']
 
@@ -157,9 +158,12 @@ class DatasetGenerator(object):
             self.judgements = None
             self.queries_with_judgements = None
 
-        # get all the queries
-        self.queries = dict_from_paths(self.params['queries'])
-        logging.log(logging.INFO, f' * Found {len(self.queries)} total queries')
+        if 'queries' in self.params:
+            # get all the queries
+            self.queries = dict_from_paths(self.params['queries'])
+            logging.log(logging.INFO, f' * Found {len(self.queries)} total queries')
+        elif 'query' in self.params:
+            self.query = self.params['query']
         # load in the possible documents
         self.docs = dict_from_paths(self.params['docs'])
         logging.log(logging.INFO, f' * Found {len(self.docs)} total docs')
@@ -306,14 +310,6 @@ class RerankingDatasetGenerator(DatasetGenerator):
 
         dataset_fp.close()
         scoring_fp.close()
-
-
-class RankingDatasetGenerator(DatasetGenerator):
-    def __init__(self):
-        pass
-
-    def sample_dataset():
-        pass
 
 _dataset_dispatch = {
     'paired': PairedDatasetGenerator,
