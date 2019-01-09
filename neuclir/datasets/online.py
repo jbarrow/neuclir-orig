@@ -2,18 +2,19 @@ from .sample import DatasetGenerator, dict_from_paths
 from typing import List, Dict, Any
 
 import pandas as pd
+import os
 
 class OnlineDatasetGenerator(DatasetGenerator):
     def __init__(self, params: Dict[str, Any], systems: List[str] = []):
         self.params = params
         self.systems = systems
 
-    def read_scores_file(self, file: Path) -> pd.DataFrame:
+    def read_scores_file(self, file: str) -> pd.DataFrame:
         """
         Read a .trec file for a specific query and return the dataframe.
         """
         try:
-            df = pd.read_csv(file, sep='\t', header=None,
+            df = pd.read_csv(file, sep=' ', header=None,
                 names=['query_id', 'Q0', 'document_id', 'rank', 'score', 'system'],
                 usecols=['document_id', 'score'])
         except pd.errors.EmptyDataError:
@@ -29,11 +30,15 @@ class OnlineDatasetGenerator(DatasetGenerator):
             scores[system] = self.read_scores_file(self.params['scores'][system])
 
         docs = dict_from_paths(self.params['docs'])
-        doc_ids = set(pd.concat([df for system, df in dfs.items() if system in self.systems]).document_id)
+        doc_ids = set(pd.concat([df for system, df in scores.items() if system in self.systems]).document_id)
         for doc in doc_ids:
+            # convert from weird path to just doc name
+            doc = os.path.basename(doc)
+            doc = doc.split('.')[0]
+
             lines.append({
                 'document_id': doc,
-                'text': ' '.join(self.read_tokens(self.docs[doc], is_json=False)),
+                'text': ' '.join(self.read_tokens(docs[doc], is_json=False)),
                 'scores': self.get_scores(scores, doc)
             })
 

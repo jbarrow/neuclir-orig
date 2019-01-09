@@ -1,6 +1,5 @@
 from sklearn.model_selection import train_test_split
 from scipy.misc import logsumexp
-from dataclasses import dataclass
 from collections import defaultdict
 from typing import List, Tuple, Callable, Dict, Set, Any, Union
 from scipy.special import logsumexp

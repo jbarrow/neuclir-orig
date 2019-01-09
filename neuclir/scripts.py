@@ -13,7 +13,7 @@ if __name__ == '__main__':
         config = json.load(fp)
 
     # load dataset generator file
-    dataset = OnlineDatasetGenerator(config['reranking'], config['systems']).sample_dataset()
+    dataset = OnlineDatasetGenerator(config['dataset']['reranking'], config['systems']).sample_dataset()
     print(dataset)
     # second, run the model and get the output
 
