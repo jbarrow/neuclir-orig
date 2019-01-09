@@ -1,0 +1,6 @@
+.ftpconfig
+run.sh
+*.json
+
+weights/
+dist/
