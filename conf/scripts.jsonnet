@@ -69,7 +69,7 @@ local MatcherConfiguration(name, type, index_type, params, mt="", indexes=[], fo
 };
 
 local QueryProcessor(query_paths) = {
-  version: "query-analyzer-umd:v10.2",
+  version: "query-analyzer-umd:"+settings['query_analyzer'],
   query_list_path: query_paths,
   target_language: language
 };

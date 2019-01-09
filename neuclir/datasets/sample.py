@@ -138,18 +138,25 @@ class DatasetGenerator(object):
 
     def prepare(self):
         logging.log(logging.INFO, 'Loading in data')
+
         # get the system scores
         logging.log(logging.INFO, ' * Reading in score files')
         self.scores = self.read_scores(self.params['scores'])
-
         self.scores = self.normalize(self.scores)
-        # get the relevance judgements
-        logging.log(logging.INFO, ' * Reading in relevance judgements')
-        judgement_files = self.params.pop('judgements', [])
-        self.judgements = pd.concat([self.read_judgements(f) for f in judgement_files])
-        # get the queries with judgements
-        self.queries_with_judgements = pd.DataFrame({'query_id': sorted(set(self.judgements.query_id))})
-        logging.log(logging.INFO, f' * There are {len(self.queries_with_judgements)} total queries with judgements')
+
+        if 'judgments' in self.params:
+            # get the relevance judgements
+            logging.log(logging.INFO, ' * Reading in relevance judgements')
+            judgement_files = self.params.pop('judgements', [])
+            self.judgements = pd.concat([self.read_judgements(f) for f in judgement_files])
+            # get the queries with judgements
+            self.queries_with_judgements = pd.DataFrame({'query_id': sorted(set(self.judgements.query_id))})
+            logging.log(logging.INFO, f' * There are {len(self.queries_with_judgements)} total queries with judgements')
+        else:
+            logging.log(logging.INFO, ' * Skipping relevance judgements')
+            self.judgements = None
+            self.queries_with_judgements = None
+
         # get all the queries
         self.queries = dict_from_paths(self.params['queries'])
         logging.log(logging.INFO, f' * Found {len(self.queries)} total queries')
