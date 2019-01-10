@@ -54,7 +54,8 @@ class LeToRWrapper(Model):
                  #query_encoder: nn.Module = QueryAverager(),
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
-                 aqwv_corrections: Optional[str] = None) -> None:
+                 aqwv_corrections: Optional[str] = None,
+                 predicting: Optional[bool] = False) -> None:
         super(LeToRWrapper, self).__init__(vocab, regularizer)
 
         self.query_field_embedder = query_field_embedder
@@ -73,17 +74,20 @@ class LeToRWrapper(Model):
         self.regularizer = regularizer
         #self.score_dropout = nn.Dropout(0.05)
 
-        self.metrics = {
-            'accuracy': CategoricalAccuracy(),
-            'aqwv_2': AQWV(corrections_file=aqwv_corrections, cutoff=2, version='program'),
-            'aqwv_3': AQWV(corrections_file=aqwv_corrections, cutoff=3, version='program')
-        }
+        if not predicting:
+            self.metrics = {
+                'accuracy': CategoricalAccuracy(),
+                'aqwv_2': AQWV(corrections_file=aqwv_corrections, cutoff=2, version='program'),
+                'aqwv_3': AQWV(corrections_file=aqwv_corrections, cutoff=3, version='program')
+            }
 
-        self.training_metrics = {
-            True: ['accuracy'],
-            #False: ['accuracy']
-            False: ['aqwv_2', 'aqwv_3']
-        }
+            self.training_metrics = {
+                True: ['accuracy'],
+                #False: ['accuracy']
+                False: ['aqwv_2', 'aqwv_3']
+            }
+        else:
+            self.metrics, self.training_metrics = {}, { True: [], False: [] }
 
         #self.loss = nn.MarginRankingLoss(margin=0.5)
         self.loss = nn.CrossEntropyLoss()

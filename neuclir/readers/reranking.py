@@ -1,4 +1,4 @@
-from typing import Iterator, List, Dict, Tuple
+from typing import Iterator, List, Dict, Tuple, Optional
 from .utils import tokenize
 
 from allennlp.data import Instance
@@ -21,8 +21,9 @@ class RerankingDatasetReader(DatasetReader):
         self.d_token_indexers = doc_token_indexers or {'tokens': SingleIdTokenIndexer()}
 
     def line_to_instance(self, query: List[Token],
-                         relevant_ignored: int, irrelevant_ignored: int,
-                         *docs: List[Tuple[List[Token], float, int]]) -> Instance:
+                         docs: List[Tuple[List[Token], float, int]],
+                         relevant_ignored: Optional[int]=None,
+                         irrelevant_ignored: Optional[int] = None) -> Instance:
         query_field = TextField(query, self.q_token_indexers)
         doc_fields = [TextField(doc[0], self.d_token_indexers) for doc in docs]
 
@@ -52,7 +53,7 @@ class RerankingDatasetReader(DatasetReader):
                 line = json.loads(line)
                 instance = self.line_to_instance(
                     tokenize(line['query']),
-                    float(line['ignored_relevant']), float(line['ignored_irrelevant']),
-                    *[(tokenize(d['text']), float(d['scores'][0]['score']), int(d['relevant'])) for d in line['docs']],
+                    [(tokenize(d['text']), float(d['scores'][0]['score']), int(d['relevant'])) for d in line['docs']],
+                    float(line['ignored_relevant']), float(line['ignored_irrelevant'])
                 )
                 yield instance

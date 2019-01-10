@@ -32,14 +32,14 @@ class OnlineDatasetGenerator(DatasetGenerator):
         docs = dict_from_paths(self.params['docs'])
         doc_ids = set(pd.concat([df for system, df in scores.items() if system in self.systems]).document_id)
         for doc in doc_ids:
-            # convert from weird path to just doc name
-            doc = os.path.basename(doc)
-            doc = doc.split('.')[0]
+            head, tail = os.path.split(doc)
+            tail = tail.split('.')[0]
 
             lines.append({
-                'document_id': doc,
-                'text': ' '.join(self.read_tokens(docs[doc], is_json=False)),
-                'scores': self.get_scores(scores, doc)
+                'document_id': tail,
+                'base_path': head,
+                'text': ' '.join(self.read_tokens(docs[tail], is_json=False)),
+                'scores': self.get_scores(scores, tail)
             })
 
         return lines
