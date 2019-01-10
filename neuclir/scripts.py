@@ -12,7 +12,7 @@ if __name__ == '__main__':
     logging.disable(logging.CRITICAL)
 
     if len(sys.argv) != 3:
-        logging.log(logging.ERROR, 'Script called incorrectly. Cannot continue.')
+        sys.exit()
 
     config_file = sys.argv[1]
     weights = sys.argv[2]
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     # second, run the model and get the output
     archive = load_archive(weights,
         cuda_device=-1,
-        overrides='{model: {predicting: true}, dataset_reader: { type: "reranking_dataset_reader" }}')
+        overrides='{model: {predicting: true}, dataset_reader: { type: "reranking_dataset_reader" }, iterator: { batch_size: 1000 }}')
     predictor = Predictor.from_archive(archive, 'online_predictor')
     json_outputs = predictor.predict_json(
         config['datasets']['reranking']['query'],
