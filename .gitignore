@@ -4,3 +4,6 @@ run.sh
 
 weights/
 dist/
+__pycache__/
+
+*.pyc

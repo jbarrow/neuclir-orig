@@ -2,7 +2,10 @@ import sys
 import json
 import logging
 
+from .predictors import OnlinePredictor
 from .datasets import OnlineDatasetGenerator
+from allennlp.models.archival import load_archive
+from allennlp.predictors.predictor import Predictor
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
@@ -14,7 +17,7 @@ if __name__ == '__main__':
         config = json.load(fp)
 
     # load dataset generator file
-    dataset = OnlineDatasetGenerator(config['dataset']['reranking'], config['systems']).sample_dataset()
+    dataset = OnlineDatasetGenerator(config['datasets']['reranking'], config['systems']).sample_dataset()
     # second, run the model and get the output
     archive = load_archive(weights,
         cuda_device=-1,
