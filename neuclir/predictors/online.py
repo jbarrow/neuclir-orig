@@ -12,7 +12,7 @@ import json
 class OnlinePredictor(Predictor):
     def predict_json(self, query: str, docs: List[JsonDict]) -> JsonDict:
         # get the base_paths
-        base_paths = [d['base_path'] for doc in docs]
+        base_paths = [doc['base_path'] for doc in docs]
         # get all the doc_ids for the output
         doc_ids = [doc['document_id'] for doc in docs]
         # generate a training instance for the query

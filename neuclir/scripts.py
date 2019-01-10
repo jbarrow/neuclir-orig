@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import logging
@@ -8,6 +9,8 @@ from allennlp.models.archival import load_archive
 from allennlp.predictors.predictor import Predictor
 
 if __name__ == '__main__':
+    logging.disable(logging.CRITICAL)
+
     if len(sys.argv) != 3:
         logging.log(logging.ERROR, 'Script called incorrectly. Cannot continue.')
 
@@ -24,11 +27,11 @@ if __name__ == '__main__':
         overrides='{model: {predicting: true}, dataset_reader: { type: "reranking_dataset_reader" }}')
     predictor = Predictor.from_archive(archive, 'online_predictor')
     json_outputs = predictor.predict_json(
-        config['query'],
+        config['datasets']['reranking']['query'],
         dataset
     )
     # print the appropriate json outputs so the file can read it
     for i, (base_path, doc_id, score) in enumerate(json_outputs):
         doc_name = os.path.join(base_path, doc_id + '.txt')
 
-        print(f'0 Q0 {doc_name} {i} {score} neuclir')
+        print(f'0 Q0 {doc_name} {i+1} {score} neuclir')
