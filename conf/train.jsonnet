@@ -6,7 +6,7 @@ local random_seed = 2019;
 local pytorch_seed = random_seed * 10;
 local numpy_seed = pytorch_seed * 10;
 
-local dataset = 'datasets/';
+local dataset = 'datasets/english_psq_smt/';
 
 # Helper Functions
 local Embedder(path, dim, trainable=false) = {
@@ -45,8 +45,7 @@ local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_
   validation_dataset_reader: {
     type: 'reranking_dataset_reader',
     scores: use_scores,
-    lazy: true,
-    top_k: 100
+    lazy: true
   },
   #evaluate_on_test: true,
   train_data_path: Pathify(dataset + 'train.json'),

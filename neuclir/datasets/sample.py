@@ -62,8 +62,8 @@ class DatasetGenerator(object):
                 usecols=['document_id', 'score'])
             #df = pd.read_csv(file, sep='\t')
             # get the query id from the header
-            #q_id = os.path.splitext(os.path.basename(file))[0][2:]
-            df.query_id.ix[0]
+            q_id = os.path.splitext(os.path.basename(file))[0][2:]
+            #df.query_id.ix[0]
             #q_id = pd.columns.values[0]
             #df.columns = ['document_id', 'score']
 
@@ -144,7 +144,7 @@ class DatasetGenerator(object):
         self.scores = self.read_scores(self.params['scores'])
         self.scores = self.normalize(self.scores)
 
-        if 'judgments' in self.params:
+        if 'judgements' in self.params:
             # get the relevance judgements
             logging.log(logging.INFO, ' * Reading in relevance judgements')
             judgement_files = self.params.pop('judgements', [])

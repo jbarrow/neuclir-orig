@@ -1,4 +1,4 @@
-from .sample import DatasetGenerator, dict_from_paths
+from .sample import DatasetGenerator, dict_from_paths, sto_normalization
 from typing import List, Dict, Any
 
 import pandas as pd
@@ -8,6 +8,7 @@ class OnlineDatasetGenerator(DatasetGenerator):
     def __init__(self, params: Dict[str, Any], systems: List[str] = []):
         self.params = params
         self.systems = systems
+        self.normalize = sto_normalization
 
     def read_scores_file(self, file: str) -> pd.DataFrame:
         """
@@ -28,6 +29,7 @@ class OnlineDatasetGenerator(DatasetGenerator):
         scores = {}
         for system in self.systems:
             scores[system] = self.read_scores_file(self.params['scores'][system])
+        scores = self.normalize(scores)
 
         docs = dict_from_paths(self.params['docs'])
         doc_ids = set(pd.concat([df for system, df in scores.items() if system in self.systems]).document_id)
