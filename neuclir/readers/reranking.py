@@ -54,6 +54,7 @@ class RerankingDatasetReader(DatasetReader):
                 line = json.loads(line)
 
                 docs = [(tokenize(d['text']), float(d['scores'][0]['score']), int(d['relevant'])) for d in line['docs']]
+                docs = sorted(docs, key=lambda x: x[1], reverse=True)
                 if self.top_k > 0:
                     docs = docs[:self.top_k]
 
