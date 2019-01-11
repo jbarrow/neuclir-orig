@@ -6,7 +6,7 @@ local random_seed = 2019;
 local pytorch_seed = random_seed * 10;
 local numpy_seed = pytorch_seed * 10;
 
-local dataset = 'datasets/normalized/';
+local dataset = 'datasets/';
 
 # Helper Functions
 local Embedder(path, dim, trainable=false) = {
@@ -51,12 +51,14 @@ local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
     aqwv_corrections: Pathify(dataset + 'validation_scoring.json'),
 
 //    doc_field_embedder: Embedder(Pathify('data/embeddings/cca_soen.txt'), embedding_dims),
-    doc_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
+//    doc_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
+    doc_field_embedder: Embedder("(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt", embedding_dims),
     doc_transformer: EmbeddingTransformer(embedding_dims),
 //    doc_encoder:
 
 //    query_field_embedder: Embedder(Pathify('data/embeddings/cca.en.txt'), embedding_dims),
-    query_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
+//    query_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
+    query_field_embedder: Embedder("(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt", embedding_dims),
     query_transformer: EmbeddingTransformer(embedding_dims),
 //    query_encoder:
 
