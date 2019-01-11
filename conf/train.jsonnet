@@ -35,7 +35,8 @@ local Scorer(embedding_dim, lexical_input=false) = {
   dropout: [0.0]
 };
 
-local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
+//local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
+local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
 
 {
   random_seed: random_seed, pytorch_seed: pytorch_seed, numpy_seed: numpy_seed,
