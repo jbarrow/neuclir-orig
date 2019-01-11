@@ -1,8 +1,12 @@
 // Variables we care about
-local language = 'so';
-local collections = ['DEV'];
-local queries = ['QUERY1'];
-local tags = 'PSQ';
+local language = 'tl';
+local experiment_name = 'test';
+
+local common = {
+  collections: ['EVAL1', 'EVAL2', 'EVAL3'],
+  queries: ['QUERY1'],
+  tags: 'PSQ'
+};
 
 // Helper variables
 local base_settings = {
@@ -35,16 +39,39 @@ local settings = {
 }[language];
 
 
+// UPDATE EXPERIMENTAL SETTINGS
+local bm = { mt: "", cutoff: -1, format: "tsv", indexing_params: "indexing_params_v1" };
+local matchers = [
+  bm + { name: "DBQT", type: "indri", index_type: "DBQT" },
+  bm + { name: "PSQ", type: "indri", index_type: "UMDPSQPhraseBasedGVCCCutoff097"},
+  bm + {name: "UMDSMT", type: "indri", index_type: "words", mt: "umd-smt-"+settings['umd_smt']},
+  bm + {name: "SMTsrc", type: "indri", index_type: "phrases-simple_part_flat_conjunction_075", indexing_params: "indexing_params_porter_stemmer_v2.0", mt: "umd-smt-"+settings['umd_smt']},
+  bm + {name: "SMTsrp", type: "indri", index_type: "phrases-complex", indexing_params: "indexing_params_porter_stemmer_v2.0", mt: "umd-smt-"+settings['umd_smt'] },
+  bm + {name: "UMDNMT", type: "indri", index_type: "words",  mt: "umd-nmt-"+settings['umd_nmt'] },
+  bm + {name: "UMDNMTsrf", type: "indri", index_type: "words_part_flat", indexing_params: "indexing_params_porter_stemmer_v2.0", mt: "umd-nmt-"+settings['umd_nmt'] },
+  bm + {name: "UMDNMTsrc", type: "indri", index_type: "words_conjunction_075", indexing_params: "indexing_params_porter_stemmer_v2.0", mt: "umd-nmt-"+settings['umd_nmt'] },
+  bm + {name: "EdiNMTsr", type: "indri", index_type: "words", indexing_params: "indexing_params_porter_stemmer_v2.0", mt: "scriptsmt-systems-v6.1" },
+  bm + {name: "EdiNMTsrf", type: "indri", index_type: "words_part_flat", indexing_params: "indexing_params_porter_stemmer_v2.0", mt: "scriptsmt-systems-v6.1" },
+  bm + {name: "customPSQ", type: "bbn_text", index_type: "UMDPSQPhraseBasedGVCCCutoff097_part_flat" }
+];
+
+local experiments = {
+  [experiment_name + '_' + matcher['name']]: common + {
+    matchers: [matcher],
+  } for matcher in matchers
+};
+
+
 local pathify(paths) = std.join('/', paths);
 
-local collection_paths = [pathify([settings['index'], 'IARPA_MATERIAL_BASE-'+settings['index'], collection]) for collection in collections];
-local query_paths = [pathify(["/storage2", "data", "NIST-data", settings['index'], "IARPA_MATERIAL_BASE-" + settings['index'], "query_store", "query-analyzer-umd-" + settings['query_analyzer'], q]) + "/" for q in queries];
+local collection_paths(collections) = [pathify([settings['index'], 'IARPA_MATERIAL_BASE-'+settings['index'], collection]) for collection in collections];
+local query_paths(queries) = [pathify(["/storage2", "data", "NIST-data", settings['index'], "IARPA_MATERIAL_BASE-" + settings['index'], "query_store", "query-analyzer-umd-" + settings['query_analyzer'], q]) + "/" for q in queries];
 
 local asr_store="material-asr-"+language+"-"+settings['asr'];
 local sent_split="sent-split-"+settings['sentence_splitter'];
 
 // Helper functions
-local MatcherConfiguration(name, type, index_type, params, mt="", indexes=[], format='tsv', cutoff=-1) = {
+local MatcherConfiguration(collection_paths, name, type, index_type, params, mt="", indexes=[], format='tsv', cutoff=-1) = {
   local version="indexing-umd-"+settings['indexer'],
   local no_mt_systems = {"PSQ": false, "DBQT": false, "customPSQ": false},
   local use_mt = if std.objectHas(no_mt_systems, name) then false else true,
@@ -68,6 +95,15 @@ local MatcherConfiguration(name, type, index_type, params, mt="", indexes=[], fo
   indexes: indexes
 };
 
+local generate_matchers(collections, configs) = [MatcherConfiguration(
+    collections, name=matcher['name'],
+    type=matcher['type'],
+    index_type=matcher['index_type'],
+    params=matcher['indexing_params'],
+    mt=matcher['mt'],
+    format=matcher['format'],
+    cutoff=matcher['cutoff']) for matcher in configs];
+
 local QueryProcessor(query_paths) = {
   version: "query-analyzer-umd:"+settings['query_analyzer'],
   query_list_path: query_paths,
@@ -77,43 +113,49 @@ local QueryProcessor(query_paths) = {
 // Central JSON structure
 
 {
-  submission_type: "contrastive",
-  data_collection: {
-    data_store_structure: [
-       "data_structrue_store/" + settings['data_structure_store']
-    ],
-    collections: collection_paths
-  },
-  query_processor: QueryProcessor(query_paths),
-  matcher: {
-   version: "matching-umd:"+settings['matcher'],
-    configurations: [
-      MatcherConfiguration("DBQT", "indri", "DBQT", "indexing_params_v1.0"),
-      MatcherConfiguration("PSQ", "indri", "UMDPSQPhraseBasedGVCCCutoff097", "indexing_params_v1.0"),
-      MatcherConfiguration("UMDSMT", "indri", "words", "indexing_params_v1.0", mt="umd-smt-"+settings['umd_smt']),
-      MatcherConfiguration("SMTsrc", "indri", "phrases-simple_part_flat_conjunction_075", "indexing_params_porter_stemmer_v2.0", mt="umd-smt-"+settings['umd_smt']),
-      MatcherConfiguration("SMTsrp", "indri", "phrases-complex", "indexing_params_porter_stemmer_v2.0", mt="umd-smt-"+settings['umd_smt']),
-      MatcherConfiguration("UMDNMT", "indri", "words", "indexing_params_v1.0", mt="umd-nmt-"+settings['umd_nmt']),
-      MatcherConfiguration("UMDNMTsrf", "indri", "words_part_flat", "indexing_params_porter_stemmer_v2.0", mt="umd-nmt-"+settings['umd_nmt']),
-      MatcherConfiguration("UMDNMTsrc", "indri", "words_conjunction_075", "indexing_params_porter_stemmer_v2.0", mt="umd-nmt-"+settings['umd_nmt']),
-      MatcherConfiguration("EdiNMTsr", "indri", "words", "indexing_params_porter_stemmer_v2.0", mt="scriptsmt-systems-v6.1"),
-      MatcherConfiguration("EdiNMTsrf", "indri", "words_part_flat", "indexing_params_porter_stemmer_v2.0", mt="scriptsmt-systems-v6.1")
-    ] + if language == 'so' then [MatcherConfiguration("customPSQ", "bbn_text", "UMDPSQPhraseBasedGVCCCutoff097_part_flat", "indexing_params_v1.0")] else []
-  },
-  evidence_combination: {
-    version: "evidence-combination:v11.2",
-    cutoff_type: "fixed",
-    cutoff: 2,
-    score_type: "borda",
-    filtering: ""
-  },
-  evaluator: {
-    version: "evaluation:v8.0",
-    relevance_judgments:"/storage2/data/NIST-data/relevance_judgments",
-    mode: "light",
-    beta: "40"
-  },
-  description: {
-    tags: tags
-  }
+  [key + '.json']: {
+    local collections = collection_paths(experiments[key]['collections']),
+    submission_type: "contrastive",
+    data_collection: {
+      data_store_structure: [
+         "data_structrue_store/" + settings['data_structure_store']
+      ],
+      collections: collections
+    },
+    query_processor: QueryProcessor(query_paths(experiments[key]['queries'])),
+    matcher: {
+     version: "matching-umd:"+settings['matcher'],
+     configurations: generate_matchers(collections, experiments[key]['matchers'])
+    },
+    evidence_combination: {
+      version: "evidence-combination:v11.2",
+      cutoff_type: "fixed",
+      cutoff: 2,
+      score_type: "borda",
+      filtering: ""
+    },
+    evaluator: {
+      version: "evaluation:v8.0",
+      relevance_judgments:"/storage2/data/NIST-data/relevance_judgments",
+      mode: "light",
+      beta: "40"
+    },
+    description: {
+      tags: experiments[key]['tags']
+    }
+  } for key in std.objectFields(experiments)
 }
+
+
+/* configurations: [
+  MatcherConfiguration(collections, name="DBQT", type="indri", index_type="DBQT", params="indexing_params_v1.0"),
+  MatcherConfiguration(collections, "PSQ", "indri", "UMDPSQPhraseBasedGVCCCutoff097", "indexing_params_v1.0"),
+  MatcherConfiguration(collections, "UMDSMT", "indri", "words", "indexing_params_v1.0", mt="umd-smt-"+settings['umd_smt']),
+  MatcherConfiguration(collections, "SMTsrc", "indri", "phrases-simple_part_flat_conjunction_075", "indexing_params_porter_stemmer_v2.0", mt="umd-smt-"+settings['umd_smt']),
+  MatcherConfiguration(collections, "SMTsrp", "indri", "phrases-complex", "indexing_params_porter_stemmer_v2.0", mt="umd-smt-"+settings['umd_smt']),
+  MatcherConfiguration(collections, "UMDNMT", "indri", "words", "indexing_params_v1.0", mt="umd-nmt-"+settings['umd_nmt']),
+  MatcherConfiguration(collections, "UMDNMTsrf", "indri", "words_part_flat", "indexing_params_porter_stemmer_v2.0", mt="umd-nmt-"+settings['umd_nmt']),
+  MatcherConfiguration(collections, "UMDNMTsrc", "indri", "words_conjunction_075", "indexing_params_porter_stemmer_v2.0", mt="umd-nmt-"+settings['umd_nmt']),
+  MatcherConfiguration(collections, "EdiNMTsr", "indri", "words", "indexing_params_porter_stemmer_v2.0", mt="scriptsmt-systems-v6.1"),
+  MatcherConfiguration(collections, "EdiNMTsrf", "indri", "words_part_flat", "indexing_params_porter_stemmer_v2.0", mt="scriptsmt-systems-v6.1")
+] + if language == 'so' then [MatcherConfiguration("customPSQ", "bbn_text", "UMDPSQPhraseBasedGVCCCutoff097_part_flat", "indexing_params_v1.0")] else [] */

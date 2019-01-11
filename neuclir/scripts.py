@@ -8,8 +8,10 @@ from .datasets import OnlineDatasetGenerator
 from allennlp.models.archival import load_archive
 from allennlp.predictors.predictor import Predictor
 
+
 if __name__ == '__main__':
-    logging.disable(logging.CRITICAL)
+    #logging.disable(logging.CRITICAL)
+    logging.basicConfig(filename='/media/log_dir/joe-logging.log',level=logging.DEBUG)
 
     if len(sys.argv) != 3:
         sys.exit()
@@ -24,7 +26,7 @@ if __name__ == '__main__':
     # second, run the model and get the output
     archive = load_archive(weights,
         cuda_device=-1,
-        overrides='{model: {predicting: true}, dataset_reader: { type: "reranking_dataset_reader" }, iterator: { batch_size: 1000 }}')
+        overrides='{model: {predicting: true}, dataset_reader: { type: "reranking_dataset_reader" }}')
     predictor = Predictor.from_archive(archive, 'online_predictor')
     json_outputs = predictor.predict_json(
         config['datasets']['reranking']['query'],

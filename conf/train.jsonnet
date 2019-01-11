@@ -87,7 +87,8 @@ local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
     validation_metric: '+aqwv_2',
     optimizer: {
       type: 'adam',
-      lr: 0.001
+      lr: 0.001,
+      weight_decay: 0.001
     }
   }
 }

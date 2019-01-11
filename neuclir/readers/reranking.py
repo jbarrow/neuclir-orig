@@ -14,11 +14,12 @@ import json
 @DatasetReader.register('reranking_dataset_reader')
 class RerankingDatasetReader(DatasetReader):
     def __init__(self, scores: bool = True, query_token_indexers: Dict[str, TokenIndexer] = None,
-                 doc_token_indexers: Dict[str, TokenIndexer] = None, lazy: bool = False) -> None:
+                 doc_token_indexers: Dict[str, TokenIndexer] = None, lazy: bool = False, top_k: int = -1) -> None:
         super().__init__(lazy=lazy)
         self.scores = scores
         self.q_token_indexers = query_token_indexers or {'tokens': SingleIdTokenIndexer()}
         self.d_token_indexers = doc_token_indexers or {'tokens': SingleIdTokenIndexer()}
+        self.top_k = top_k
 
     def line_to_instance(self, query: List[Token],
                          docs: List[Tuple[List[Token], float, int]],
