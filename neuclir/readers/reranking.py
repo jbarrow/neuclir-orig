@@ -55,7 +55,7 @@ class RerankingDatasetReader(DatasetReader):
 
                 docs = [(tokenize(d['text']), float(d['scores'][0]['score']), int(d['relevant'])) for d in line['docs']]
                 if self.top_k > 0:
-                    docs = docs[:top_k]
+                    docs = docs[:self.top_k]
 
                 instance = self.line_to_instance(tokenize(line['query']), docs,
                     float(line['ignored_relevant']), float(line['ignored_irrelevant'])
