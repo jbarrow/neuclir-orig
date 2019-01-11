@@ -46,7 +46,7 @@ local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_
     type: 'reranking_dataset_reader',
     scores: use_scores,
     lazy: true,
-    top_k: 20
+    top_k: 100
   },
   #evaluate_on_test: true,
   train_data_path: Pathify(dataset + 'train.json'),
@@ -96,7 +96,7 @@ local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_
     optimizer: {
       type: 'adam',
       lr: 0.001,
-      weight_decay: 0.001
+//      weight_decay: 0.001
     }
   }
 }
