@@ -52,9 +52,12 @@ class RerankingDatasetReader(DatasetReader):
         with open(file_path) as fp:
             for line in fp:
                 line = json.loads(line)
-                instance = self.line_to_instance(
-                    tokenize(line['query']),
-                    [(tokenize(d['text']), float(d['scores'][0]['score']), int(d['relevant'])) for d in line['docs']],
+
+                docs = [(tokenize(d['text']), float(d['scores'][0]['score']), int(d['relevant'])) for d in line['docs']]
+                if self.top_k > 0:
+                    docs = docs[:top_k]
+
+                instance = self.line_to_instance(tokenize(line['query']), docs,
                     float(line['ignored_relevant']), float(line['ignored_irrelevant'])
                 )
                 yield instance

@@ -42,7 +42,12 @@ local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_
   random_seed: random_seed, pytorch_seed: pytorch_seed, numpy_seed: numpy_seed,
   dataset_reader: { type: 'paired_dataset_reader', scores: use_scores, lazy: false },
   #validation_dataset_reader: { type: 'paired_dataset_reader', scores: use_scores, lazy: false },
-  validation_dataset_reader: { type: 'reranking_dataset_reader', scores: use_scores, lazy: true },
+  validation_dataset_reader: {
+    type: 'reranking_dataset_reader',
+    scores: use_scores,
+    lazy: true,
+    top_k: 20
+  },
   #evaluate_on_test: true,
   train_data_path: Pathify(dataset + 'train.json'),
   #validation_data_path: Pathify('datasets/random/validation_paired.json'),
