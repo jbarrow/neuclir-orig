@@ -10,8 +10,8 @@ from allennlp.predictors.predictor import Predictor
 
 
 if __name__ == '__main__':
-    #logging.disable(logging.CRITICAL)
-    logging.basicConfig(filename='/media/log_dir/joe-logging.log',level=logging.DEBUG)
+    logging.disable(logging.CRITICAL)
+    #logging.basicConfig(filename='/media/log_dir/joe-logging.log',level=logging.DEBUG)
 
     if len(sys.argv) != 3:
         sys.exit()
