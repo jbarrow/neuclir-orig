@@ -17,9 +17,12 @@ class OnlinePredictor(Predictor):
         doc_ids = [doc['document_id'] for doc in docs]
         # generate a training instance for the query
         instance = self._json_to_instance(query, docs)
+        # get the scores for test
+        scores = [doc['scores'][0]['score'] for doc in docs]
         # get the sorted list of documents out
         return sorted(
-            zip(base_paths, doc_ids, self.predict_instance(instance)['logits']),
+            #zip(base_paths, doc_ids, self.predict_instance(instance)['logits']),
+            zip(base_paths, doc_ids, scores),
             key=lambda x: x[-1], reverse=True)
 
     def _json_to_instance(self, query: str, docs: JsonDict) -> Instance:
