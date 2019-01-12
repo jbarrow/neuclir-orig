@@ -40,7 +40,7 @@ class OnlineDatasetGenerator(DatasetGenerator):
                 'document_id': tail,
                 'base_path': head,
                 'text': ' '.join(self.read_tokens(docs[tail], is_json=False)),
-                'scores': self.get_scores(scores, tail)
+                'scores': self.get_scores(scores, doc)
             })
 
         return lines
