@@ -8,8 +8,8 @@ from ..readers.utils import tokenize
 
 import json
 
-@Predictor.register('online_predictor')
-class OnlinePredictor(Predictor):
+@Predictor.register('query_predictor')
+class QueryPredictor(Predictor):
     def predict_json(self, query: str, docs: List[JsonDict]) -> JsonDict:
         # get all the doc_ids for the output
         doc_ids = [doc['document_id'] for doc in docs]
