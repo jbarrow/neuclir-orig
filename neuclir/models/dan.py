@@ -138,8 +138,8 @@ class LeToRWrapper(Model):
         # (batch_size, num_docs, transform_dim)
         qs_encoded = qs_encoded.unsqueeze(1).repeat(1, num_docs, 1)
 
-        # (batch_size, num_docs, transform_dim * 2)
-        qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded], dim=2)
+        # (batch_size, num_docs, transform_dim * 2 + 1)
+        qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded, F.cosine_similarity(d, q)], dim=2)
 
         semantic_scores = self.scorer(qd)
         #semantic_scores = self.score_dropout(semantic_scores)

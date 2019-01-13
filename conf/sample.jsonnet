@@ -17,19 +17,19 @@ local so_q2_ana = "so/so_analysis_q1/query-analyzer-umd-v10.3_matching-umd-v11.1
 local matchers = {
   /* # system group
   dbqt: "UMD-CLIR-workQMDir-DBQT/",
-  # system group
-  umd_smt: "UMD-CLIR-workQMDir-UMDSMT/",
-  umd_smt_src: "UMD-CLIR-workQMDir-SMTsrc/", */
+  # system group*/
+  umd_smt: "UMD-CLIR-workQMDir-UMDSMT/"/*,
+  umd_smt_src: "UMD-CLIR-workQMDir-SMTsrc/",
   umd_smt_srp: "UMD-CLIR-workQMDir-SMTsrp/",
-  /* # system group
+  # system group
   umd_nmt: "UMD-CLIR-workQMDir-UMDNMT/",
   umd_nmt_srf: "UMD-CLIR-workQMDir-UMDNMTsrf/",
   umd_nmt_src: "UMD-CLIR-workQMDir-UMDNMTsrc/",
   # system group
   edi_nmt_sr: "UMD-CLIR-workQMDir-EdiNMTsr/",
   edi_nmt_srf: "UMD-CLIR-workQMDir-EdiNMTsrf/",
-  # system group */
-  psq: "UMD-CLIR-workQMDir-PSQ/"
+  # system group
+  psq: "UMD-CLIR-workQMDir-PSQ/" */
 };
 
 {
@@ -121,6 +121,6 @@ local matchers = {
     } */
   },
   systems: std.objectFields(matchers),
-  output: "datasets/english_allscores",
+  output: "datasets/newenglish",
   logging: "info"
 }

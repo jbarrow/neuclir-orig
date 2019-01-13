@@ -28,7 +28,7 @@ local EmbeddingTransformer(dim, dropout=0.5, activation='relu') = {
 
 local Scorer(embedding_dim, lexical_input=false) = {
   local lexical_dims = if lexical_input then 1 else 0,
-  input_dim: embedding_dim * 2,# + lexical_dims,
+  input_dim: embedding_dim * 2 + 1,# + lexical_dims,
   num_layers: 1,
   hidden_dims: [1],
   activations: ['linear'],
