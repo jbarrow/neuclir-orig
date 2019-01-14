@@ -2,8 +2,12 @@
 run.sh
 *.json
 
+experiments/
+./datasets/
+data/
 weights/
 dist/
 __pycache__/
 
 *.pyc
+*.docx

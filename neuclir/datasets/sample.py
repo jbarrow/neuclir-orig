@@ -192,7 +192,7 @@ def s_difficult(df: pd.DataFrame, n: int = 1) -> List[str]:
 class PairedDatasetGenerator(DatasetGenerator):
     _dispatch = {
         'random': s_random,
-    #    'difficult': s_difficult,
+        'difficult': s_difficult,
     #    'pooled_plus': sample_pooled_plus
     }
 
@@ -211,21 +211,24 @@ class PairedDatasetGenerator(DatasetGenerator):
                 query_text = self.read_query(self.queries[query])
                 query_scores = self.scores[query]
                 # if we choose a sampling strategy that requires it
-                # if strategy in ['pooled']:
-                #     # exclude relevant docs
-                #     relevant = query_scores['doc_id'].isin(list(df.doc_id))
-                #     possible = query_scores[~relevant]
-                all_docs = set(self.docs.keys()) - set(df.doc_id)
+                possible = set(self.docs.keys()) - set(df.doc_id)
+                if self.params['strategy'] == 'difficult':
+                    # exclude relevant docs
+                    tmp_possible = set(query_scores[self.params['sample_system']].document_id) - set(df.doc_id)
+                    if len(tmp_possible) >= self.params['n_irrelevant']:
+                        possible = tmp_possible
                 # sample irrelevant docs for every relevant doc
                 for judgement in df.itertuples():
+                    n_irrelevant = self.params['n_irrelevant']
                     # sample a position to put the relevant document in
-                    #position = random.randint(0, self.params['n_irrelevant'])
-                    position = [random.randint(0, 1) for i in range(self.params['n_irrelevant'])]
+                    position = random.randint(0, n_irrelevant)
+                    #position = [random.randint(0, 1) for i in range(self.params['n_irrelevant'])]
                     # sample paired documents
-                    # if strategy == 'pooled' and len(possible) > n_irrelevant:
-                    #     sampled_docs = sample_pooled(possible, n_irrelevant)
+                    sampled_docs = s_random(possible, n_irrelevant)
+                    # if strategy == 'difficult' and len(possible) > n_irrelevant:
+                    #     sampled_docs = s_difficult(possible, n_irrelevant)
                     # else:
-                    sampled_docs = s_random(all_docs, self.params['n_irrelevant'])
+                    #     sampled_docs = s_random(possible, n_irrelevant)
                     # get the tokens for the documents
                     relevant = {
                         'text': ' '.join(self.read_tokens(self.docs[judgement.doc_id], is_json=False)),
@@ -237,17 +240,19 @@ class PairedDatasetGenerator(DatasetGenerator):
                         'scores': self.get_scores(query_scores, doc_id)
                     } for doc_id in sampled_docs]
 
-                    for p, i in zip(position, irrelevant):
-                        ordered_docs = [i, relevant] if p == 1 else [relevant, i]
-                        # generate the output json line
-                        outline = json.dumps({
-                            'query': ' '.join(query_text),
-                            #'docs': irrelevant[:position] + [relevant] + irrelevant[position:],
-                            'docs': ordered_docs,
-                            'relevant': p
-                        })
-                        # write the line to the json file
-                        out_fp.write(outline + '\n')
+                    #for p, i in zip(position, irrelevant):
+                    #   ordered_docs = [i, relevant] if p == 1 else [relevant, i]
+                    # generate the output json line
+                    outline = json.dumps({
+                        'query': ' '.join(query_text),
+                        'docs': irrelevant[:position] + [relevant] + irrelevant[position:],
+                        'relevant': position
+                        #'docs': ordered_docs,
+                        #'relevant': p
+                    })
+                    # write the line to the json file
+                    out_fp.write(outline + '\n')
+
                     pbar.update(1)
         out_fp.close()
 

@@ -6,7 +6,7 @@ local random_seed = 2019;
 local pytorch_seed = random_seed * 10;
 local numpy_seed = pytorch_seed * 10;
 
-local dataset = 'datasets/english_psq_smt/';
+local dataset = 'datasets/english_multinorm/';
 
 # Helper Functions
 local Embedder(path, dim, trainable=false) = {
@@ -28,15 +28,16 @@ local EmbeddingTransformer(dim, dropout=0.5, activation='relu') = {
 
 local Scorer(embedding_dim, lexical_input=false) = {
   local lexical_dims = if lexical_input then 1 else 0,
-  input_dim: embedding_dim * 2 + 1,# + lexical_dims,
+  input_dim: embedding_dim * 2,# + 1,# + lexical_dims,
   num_layers: 1,
   hidden_dims: [1],
   activations: ['linear'],
   dropout: [0.0]
 };
 
-//local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
-local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
+#local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
+#local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
+local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
 
 {
   random_seed: random_seed, pytorch_seed: pytorch_seed, numpy_seed: numpy_seed,
@@ -95,7 +96,7 @@ local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_
     optimizer: {
       type: 'adam',
       lr: 0.001,
-//      weight_decay: 0.001
+#      weight_decay: 0.001
     }
   }
 }
