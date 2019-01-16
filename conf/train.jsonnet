@@ -6,7 +6,8 @@
 # batch_size: int,
 # clipping: float,
 # lr: float,
-# l2: float
+# l2: float,
+# dataset: str
 
 # Variables
 
@@ -17,7 +18,7 @@ local random_seed = 2019;
 local pytorch_seed = random_seed * 10;
 local numpy_seed = pytorch_seed * 10;
 
-local dataset = 'datasets/english_multinorm/';
+local dataset = std.extVar('dataset');
 
 # Helper Functions
 local Embedder(path, dim, trainable=false) = {
