@@ -28,30 +28,31 @@ jsonnet_str = open('conf/train.jsonnet').read()
 
 for dataset in glob.glob('datasets/*/'):
     for dan in [True, False]:
-        learning_rate = random.sample(learning_rates, k=1)[0]
-        l2 = random.sample(l2s, k=1)[0]
-        dropout = random.sample(dropouts, k=1)[0]
-        averaged = random.sample(averageds, k=1)[0]
-        num_filter = random.sample(num_filters, k=1)[0]
-        batch_size = random.sample(batch_sizes, k=1)[0]
-        clipping = random.sample(clippings, k=1)[0]
+        for i in range(3):
+            learning_rate = random.sample(learning_rates, k=1)[0]
+            l2 = random.sample(l2s, k=1)[0]
+            dropout = random.sample(dropouts, k=1)[0]
+            averaged = random.sample(averageds, k=1)[0]
+            num_filter = random.sample(num_filters, k=1)[0]
+            batch_size = random.sample(batch_sizes, k=1)[0]
+            clipping = random.sample(clippings, k=1)[0]
 
-        d = os.path.basename(os.path.normpath(dataset))
+            d = os.path.basename(os.path.normpath(dataset))
 
-        with open(f'runs/{d}_dan-{dan}.json', 'w') as fp:
-            json_str = _jsonnet.evaluate_snippet(
-                "conf/train.jsonnet", jsonnet_str,
-                ext_codes={
-                    'dan': str(dan).lower(),
-                    'averaged': str(averaged).lower(),
-                    'num_filters': str(num_filter),
-                    'dropout': str(dropout),
-                    'batch_size': str(batch_size),
-                    'clipping': str(clipping),
-                    'lr': str(learning_rate),
-                    'l2': str(l2),
-                },
-                ext_vars={
-                    'dataset': dataset
-                })
-            fp.write(json_str)
+            with open(f'runs/{d}_dan-{dan}_run-{i}.json', 'w') as fp:
+                json_str = _jsonnet.evaluate_snippet(
+                    "conf/train.jsonnet", jsonnet_str,
+                    ext_codes={
+                        'dan': str(dan).lower(),
+                        'averaged': str(averaged).lower(),
+                        'num_filters': str(num_filter),
+                        'dropout': str(dropout),
+                        'batch_size': str(batch_size),
+                        'clipping': str(clipping),
+                        'lr': str(learning_rate),
+                        'l2': str(l2),
+                    },
+                    ext_vars={
+                        'dataset': dataset
+                    })
+                fp.write(json_str)
