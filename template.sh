@@ -5,4 +5,6 @@
 #SBATCH --mem=16GB
 #SBATCH --time=02:00:00
 
-allennp train __EXPNAME__.json --include-package neuclir -s ../experiments/__EXPNAME__
+. activate neuclir
+
+allennlp train __EXPNAME__.json --include-package neuclir -s ../experiments/__EXPNAME__

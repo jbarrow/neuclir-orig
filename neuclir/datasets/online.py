@@ -9,6 +9,8 @@ class OnlineDatasetGenerator(DatasetGenerator):
         self.params = params
         self.systems = systems
         self.f_normalize = sto_normalization
+        self.sw_filter = StopwordFilter()
+        self.tokenizer = WordTokenizer(word_filter=self.sw_filter)
 
     def read_scores_file(self, file: str) -> pd.DataFrame:
         """
@@ -36,11 +38,15 @@ class OnlineDatasetGenerator(DatasetGenerator):
             head, tail = os.path.split(doc)
             tail = tail.split('.')[0]
 
-            lines.append({
-                'document_id': tail,
-                'base_path': head,
-                'text': ' '.join(self.read_tokens(docs[tail], is_json=False)),
-                'scores': self.get_scores(scores, doc)
-            })
+            with open(docs[tail]) as fp:
+                tokenized = self.tokenizer.tokenize(fp.read())
+                tokenized = [w.orth_ for w in tokenized]
+
+                lines.append({
+                    'document_id': tail,
+                    'base_path': head,
+                    'text': ' '.join(tokenized),
+                    'scores': self.get_scores(scores, doc)
+                })
 
         return lines
