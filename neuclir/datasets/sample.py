@@ -1,9 +1,12 @@
+from allennlp.data.tokenizers import Tokenizer, WordTokenizer
+from allennlp.data.tokenizers.word_filter import StopwordFilter
 from sklearn.model_selection import train_test_split
 from scipy.misc import logsumexp
 from collections import defaultdict
 from typing import List, Tuple, Callable, Dict, Set, Any, Union
 from scipy.special import logsumexp
 from functools import reduce
+from shutil import copyfile
 from tqdm import tqdm
 
 import pandas as pd
@@ -29,6 +32,18 @@ def dict_from_paths(paths: List[Path], strip_file: bool = True) -> Dict[str, Pat
             filename = filename.split('.')[0] if strip_file else filename
             output[filename] = f
     return output
+
+def docs_from_paths(paths: List[Path], strip_file: bool = True, tokenizer: Tokenizer = WordTokenizer()) -> Dict[str, List[str]]:
+    docs = dict_from_paths(paths, strip_file)
+    texts = []
+
+    for doc, path in docs.items():
+        with open(path) as fp:
+            texts.append((doc, fp.read()))
+    tokenized = tokenizer.batch_tokenize([t[1] for t in texts])
+    tokenized = [[w.orth_ for w in t] for t in tokenized]
+
+    return {doc: tokens for (doc, _), tokens in zip(texts, tokenized)}
 
 # normalization functions
 def flatten(l_of_ls):
@@ -139,6 +154,12 @@ class DatasetGenerator(object):
     def prepare(self):
         logging.log(logging.INFO, 'Loading in data')
 
+        logging.log(logging.INFO, ' * Creating directory ' + self.output)
+        try:
+            os.mkdir(self.output)
+        except FileExistsError:
+            logging.log(logging.INFO, ' * Directory already exists, overwriting previous data.')
+
         # get the system scores
         logging.log(logging.INFO, ' * Reading in score files')
         self.scores = self.read_scores(self.params['scores'])
@@ -164,7 +185,13 @@ class DatasetGenerator(object):
         elif 'query' in self.params:
             self.query = self.params['query']
         # load in the possible documents
-        self.docs = dict_from_paths(self.params['docs'])
+        if 'filter_stopwords' in self.params and self.params['filter_stopwords']:
+            sw_filter = StopwordFilter()
+            tokenizer = WordTokenizer(word_filter=sw_filter)
+        else:
+            tokenizer = WordTokenizer()
+
+        self.docs = docs_from_paths(self.params['docs'], tokenizer)
         logging.log(logging.INFO, f' * Found {len(self.docs)} total docs')
         # # impose an order on the systems
         # self.systems = sorted(self.params['scores'].keys())
@@ -231,12 +258,14 @@ class PairedDatasetGenerator(DatasetGenerator):
                     #     sampled_docs = s_random(possible, n_irrelevant)
                     # get the tokens for the documents
                     relevant = {
-                        'text': ' '.join(self.read_tokens(self.docs[judgement.doc_id], is_json=False)),
+                        #'text': ' '.join(self.read_tokens(self.docs[judgement.doc_id], is_json=False)),
+                        'text': ' '.join(self.docs[judgement.doc_id]),
                         'scores': self.get_scores(query_scores, judgement.doc_id)
                     }
                     # get the tokens for the irrelevant documents
                     irrelevant = [{
-                        'text': ' '.join(self.read_tokens(self.docs[doc_id], is_json=False)),
+                        #'text': ' '.join(self.read_tokens(self.docs[doc_id], is_json=False)),
+                        'text': ' '.join(self.docs[doc_id]),
                         'scores': self.get_scores(query_scores, doc_id)
                     } for doc_id in sampled_docs]
 
@@ -273,6 +302,7 @@ class RerankingDatasetGenerator(DatasetGenerator):
         # when generating a validation set, our goal is to rerank, so we want
         # to load in all scores for a given query, up to, say, 100.
         for query, dfs in tqdm(self.scores.items()):
+            #print(query, dfs.keys())
             query_text = self.read_query(self.queries[query])
             relevant = self.judgements[self.judgements['query_id'] == query]
             # compute the number of relevant docs that we missed
@@ -287,7 +317,8 @@ class RerankingDatasetGenerator(DatasetGenerator):
                 for doc in docs:
                     scored_docs.append({
                         'document_id': doc,
-                        'text': ' '.join(self.read_tokens(self.docs[doc], is_json=False)),
+                        #'text': ' '.join(self.read_tokens(self.docs[doc], is_json=False)),
+                        'text': ' '.join(self.docs[doc]),
                         'scores': self.get_scores(dfs, doc),
                         'relevant': self.get_relevant(relevant, doc)
                     })
@@ -315,14 +346,53 @@ class RerankingDatasetGenerator(DatasetGenerator):
         dataset_fp.close()
         scoring_fp.close()
 
+
+class RankingDatasetGenerator(DatasetGenerator):
+    def sample_dataset(self) -> None:
+        logging.log(logging.INFO, f'Creating RANKING dataset: {self.name}')
+        # load all the datasets, score files, etc.
+        self.prepare()
+        # open the file
+        dataset_fp = open(os.path.join(self.output, f'{self.name}.json'), 'w')
+        # when generating a validation set, our goal is to rerank, so we want
+        # to load in all scores for a given query, up to, say, 100.
+        for query, path in tqdm(self.queries.items()):
+            dfs = self.scores.get(query, {})
+            query_text = self.read_query(path)
+            relevant = self.judgements[self.judgements['query_id'] == query]
+
+            scored_docs = []
+            for doc_id, path in self.docs.items():
+                scored_docs.append({
+                    'document_id': doc_id,
+                    #'text': ' '.join(self.read_tokens(path, is_json=False)),
+                    'text': ' '.join(self.docs[path]),
+                    'scores': self.get_scores(dfs, doc_id),
+                    'relevant': self.get_relevant(relevant, doc_id)
+                })
+            # write a single query
+            outline = json.dumps({
+                'query_id': query,
+                'query': ' '.join(query_text),
+                'docs': scored_docs
+            })
+            dataset_fp.write(outline + '\n')
+
+        dataset_fp.close()
+
+
 _dataset_dispatch = {
     'paired': PairedDatasetGenerator,
     'reranking': RerankingDatasetGenerator,
-#    'ranking': RankingDatasetGenerator
+    'ranking': RankingDatasetGenerator
 }
 
 if __name__ == '__main__':
-    settings = json.load(open('sample.json'))
+    if len(sys.argv) != 2:
+        print('Usage:\npython -m neuclir.datasets.sample [CONFIG]')
+        sys.exit(-1)
+
+    settings = json.load(open(sys.argv[1]))
     # set up the logger
     logging_level = settings.pop('logging', 'info').upper()
     logging.basicConfig(level=logging.getLevelName(logging_level))
@@ -331,6 +401,5 @@ if __name__ == '__main__':
         generator = _dataset_dispatch[dataset['type']](name, dataset, settings['output'], settings['systems'])
         generator.sample_dataset()
 
-
-# 6. match document and query ids
-# 7. output trec and tsv files so we can use existing aqwv scorer
+    # copy over the selected files
+    copyfile(sys.argv[1], os.path.join(settings['output'], os.path.basename(sys.argv[1])))

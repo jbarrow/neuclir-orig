@@ -50,6 +50,7 @@ class OnlineDatasetReader(DatasetReader):
         with open(file_path) as fp:
             for line in fp:
 
+
                 instance = self.line_to_instance(
                     tokenize(query),
                     *[(tokenize(d['text']), float(d['scores'][0]['score']), int(d['relevant'])) for d in line['docs']],

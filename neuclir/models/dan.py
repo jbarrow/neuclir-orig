@@ -44,41 +44,43 @@ class LeToRWrapper(Model):
                  vocab: Vocabulary,
                  query_field_embedder: TextFieldEmbedder,
                  doc_field_embedder: TextFieldEmbedder,
-                 doc_transformer: FeedForward,
-                 query_transformer: FeedForward,
+                 #doc_transformer: FeedForward,
+                 #query_transformer: FeedForward,
                  scorer: FeedForward,
                  total_scorer: FeedForward,
-                 doc_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50), #
-                 #doc_encoder: nn.Module = QueryAverager(),
-                 query_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50), #
-                 #query_encoder: nn.Module = QueryAverager(),
+                 doc_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50),
+                 query_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50),
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
                  aqwv_corrections: Optional[str] = None,
-                 predicting: Optional[bool] = False) -> None:
+                 aqwv_test_corrections: Optional[str] = None,
+                 predicting: Optional[bool] = False,
+                 dropout: float = 0.) -> None:
         super(LeToRWrapper, self).__init__(vocab, regularizer)
 
         self.query_field_embedder = query_field_embedder
         self.doc_field_embedder = doc_field_embedder
-        self.document_transformer = doc_transformer
-        self.query_transformer = query_transformer
+        #self.document_transformer = doc_transformer
+        #self.query_transformer = query_transformer
 
         self.scorer = scorer
         self.total_scorer = total_scorer
-        #self.scorer_norm = nn.BatchNorm1d(1)
         self.doc_encoder = doc_encoder
-        #self.doc_norm = nn.BatchNorm2d(100)
         self.query_encoder = query_encoder
-        #self.query_norm = nn.BatchNorm1d(100)
+
         self.initializer = initializer
         self.regularizer = regularizer
-        #self.score_dropout = nn.Dropout(0.05)
+        self.dropout = nn.Dropout(dropout)
+
+        self.qd_norm = nn.BatchNorm1d(100)
+        self.score_norm = nn.BatchNorm1d(2)
 
         if not predicting:
             self.metrics = {
                 'accuracy': CategoricalAccuracy(),
                 'aqwv_2': AQWV(corrections_file=aqwv_corrections, cutoff=2, version='program'),
-                'aqwv_3': AQWV(corrections_file=aqwv_corrections, cutoff=3, version='program')
+                'aqwv_3': AQWV(corrections_file=aqwv_corrections, cutoff=3, version='program'),
+                'aqwv_teset': AQWV(corrections_file=aqwv_test_corrections, cutoff=2, version='program')
             }
 
             self.training_metrics = {
@@ -115,8 +117,9 @@ class LeToRWrapper(Model):
         # (batch_size, num_docs, doc_length, embedding_dim)
         ds_embedded = self.doc_field_embedder(docs)
         # (batch_size, num_docs, doc_length, transform_dim)
-        ds_transformed = self.document_transformer(ds_embedded)
+        #ds_transformed = self.document_transformer(ds_embedded)
         #ds_transformed = self.doc_norm(ds_transformed)
+        ds_transformed = ds_embedded
         batch_size, num_docs, doc_length, transform_dim = ds_transformed.shape
         # (batch_size * num_docs, doc_length, transform_dim)
         ds_transformed = ds_transformed.view(batch_size*num_docs, doc_length, transform_dim)
@@ -131,8 +134,9 @@ class LeToRWrapper(Model):
         # (batch_size, query_length, embedding_dim)
         qs_embedded = self.query_field_embedder(query)
         # (batch_size, query_length, transform_dim)
-        qs_transformed = self.query_transformer(qs_embedded)
+        #qs_transformed = self.query_transformer(qs_embedded)
         #qs_transformed = self.query_norm(qs_encoded)
+        qs_transformed = qs_embedded
         # (batch_size, transform_dim)
         qs_encoded = self.query_encoder(qs_transformed, qs_mask)
         # (batch_size, num_docs, transform_dim)
@@ -142,14 +146,19 @@ class LeToRWrapper(Model):
         #qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded, F.cosine_similarity(ds_encoded, qs_encoded, dim=2).unsqueeze(2)], dim=2)
         qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded], dim=2)
 
+        qd = qd.view(batch_size*num_docs, -1)
+        qd = self.qd_norm(qd)
+        qd = qd.view(batch_size, num_docs, -1)
+        qd = self.dropout(qd)
+
         semantic_scores = self.scorer(qd)
-        #semantic_scores = self.score_dropout(semantic_scores)
 
         if scores is not None:
-            # (batch_size, num_docs, transform_dim * 2 + 1)
+            # (batch_size, num_docs, 2)
             semantic_scores = torch.cat([semantic_scores, scores], dim=2)
-
-        # dropout the scores for robustness
+            semantic_scores = semantic_scores.view(batch_size*num_docs, -1)
+            semantic_scores = self.score_norm(semantic_scores)
+            semantic_scores = semantic_scores.view(batch_size, num_docs, -1)
 
         # (batch_size, num_docs)
         logits = self.total_scorer(semantic_scores)

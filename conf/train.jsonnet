@@ -1,4 +1,15 @@
+# EXTERNAL VARIABLE LIST
+# dan: bool,
+# averaged: bool,
+# num_filters: int,
+# dropout: float,
+# batch_size: int,
+# clipping: float,
+# lr: float,
+# l2: float
+
 # Variables
+
 local use_scores = true;
 local embedding_dims = 50;
 
@@ -35,38 +46,49 @@ local Scorer(embedding_dim, lexical_input=false) = {
   dropout: [0.0]
 };
 
+local doc_encoder = if std.extVar('dan') then {
+  type: 'boe',
+  embedding_dim: embedding_dims,
+  averaged: std.extVar('averaged')
+} else {
+  type: 'cnn',
+  embedding_dim: embedding_dims,
+  num_filters: std.extVar('num_filters'),
+  output_dim: embedding_dims
+};
+
 #local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
-#local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
-local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
+local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
+#local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
 
 {
   random_seed: random_seed, pytorch_seed: pytorch_seed, numpy_seed: numpy_seed,
   dataset_reader: { type: 'paired_dataset_reader', scores: use_scores, lazy: false },
-  #validation_dataset_reader: { type: 'paired_dataset_reader', scores: use_scores, lazy: false },
   validation_dataset_reader: {
     type: 'reranking_dataset_reader',
     scores: use_scores,
     lazy: true
   },
-  #evaluate_on_test: true,
+  evaluate_on_test: true,
   train_data_path: Pathify(dataset + 'train.json'),
-  #validation_data_path: Pathify('datasets/random/validation_paired.json'),
   validation_data_path: Pathify(dataset + 'validation.json'),
+  test_data_path: Pathify(dataset + 'test.json'),
   model: {
     type: 'letor_training',
+    dropout: std.extVar('dropout'),
     aqwv_corrections: Pathify(dataset + 'validation_scoring.json'),
+    aqwv_test_corrections: Pathify(dataset + 'test_scoring.json'),
 
 //    doc_field_embedder: Embedder(Pathify('data/embeddings/cca_soen.txt'), embedding_dims),
 //    doc_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
     doc_field_embedder: Embedder("(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt", embedding_dims),
-    doc_transformer: EmbeddingTransformer(embedding_dims),
-//    doc_encoder:
+//    doc_transformer: EmbeddingTransformer(embedding_dims),
+    doc_encoder: doc_encoder,
 
 //    query_field_embedder: Embedder(Pathify('data/embeddings/cca.en.txt'), embedding_dims),
 //    query_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
     query_field_embedder: Embedder("(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt", embedding_dims),
-    query_transformer: EmbeddingTransformer(embedding_dims),
-//    query_encoder:
+//    query_transformer: EmbeddingTransformer(embedding_dims),
 
     scorer: Scorer(embedding_dims, use_scores),
     total_scorer: {
@@ -80,7 +102,7 @@ local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
   iterator: {
     type: 'bucket',
     sorting_keys: [['docs', 'list_num_tokens']],
-    batch_size: 8
+    batch_size: std.extVar('batch_size')
   },
   validation_iterator: {
     type: 'bucket',
@@ -91,12 +113,12 @@ local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
     num_epochs: 40,
     patience: 10,
     cuda_device: 0,
-    grad_clipping: 5.0,
+    grad_clipping: std.extVar('clipping'),
     validation_metric: '+aqwv_2',
     optimizer: {
       type: 'adam',
-      lr: 0.001,
-#      weight_decay: 0.001
+      lr: std.extVar('lr'),
+      weight_decay: std.extVar('l2')
     }
   }
 }
