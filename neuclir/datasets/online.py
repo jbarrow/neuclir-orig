@@ -1,3 +1,5 @@
+from allennlp.data.tokenizers import Tokenizer, WordTokenizer
+from allennlp.data.tokenizers.word_filter import StopwordFilter
 from .sample import DatasetGenerator, dict_from_paths, sto_normalization
 from typing import List, Dict, Any
 
@@ -9,8 +11,8 @@ class OnlineDatasetGenerator(DatasetGenerator):
         self.params = params
         self.systems = systems
         self.f_normalize = sto_normalization
-        self.sw_filter = StopwordFilter()
-        self.tokenizer = WordTokenizer(word_filter=self.sw_filter)
+        #self.sw_filter = StopwordFilter()
+        self.tokenizer = WordTokenizer()#(word_filter=self.sw_filter)
 
     def read_scores_file(self, file: str) -> pd.DataFrame:
         """
