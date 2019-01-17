@@ -6,7 +6,12 @@ from typing import List
 from ..models import *
 from ..readers.utils import tokenize
 
+import torch.nn.functional as F
+import torch
 import json
+
+epsilon = 1e-6
+
 
 @Predictor.register('query_predictor')
 class QueryPredictor(Predictor):
@@ -14,7 +19,9 @@ class QueryPredictor(Predictor):
         doc_ids = [d['document_id'] for d in inputs['docs']]
         # run the model forward
         instance = self._json_to_instance(inputs)
-        predictions = self.predict_instance(instance)['logits']
+        # print(list(F.log_softmax(torch.tensor(self.predict_instance(instance)['logits']),dim=0)))
+        predictions =  F.log_softmax(torch.tensor(self.predict_instance(instance)['logits']), dim=0)
+        predictions = [p.item() - epsilon for p in predictions]
         #predictions = [d['scores'][0]['score'] for d in inputs['docs']]
         predictions = sorted(zip(doc_ids, predictions), key=lambda x: x[-1], reverse=True)[:2]
         # get the sorted list of documents out

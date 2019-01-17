@@ -6,7 +6,12 @@ from typing import List
 from ..models import *
 from ..readers.utils import tokenize
 
+import torch.nn.functional as F
+import torch
 import json
+
+epsilon = 1e-6
+
 
 @Predictor.register('online_predictor')
 class OnlinePredictor(Predictor):
@@ -18,10 +23,11 @@ class OnlinePredictor(Predictor):
         # generate a training instance for the query
         instance = self._json_to_instance(query, docs)
         # get the scores for test
-        # scores = [doc['scores'][0]['score'] for doc in docs]
+        predictions =  F.log_softmax(torch.tensor(self.predict_instance(instance)['logits']), dim=0)
+        predictions = [p.item() - epsilon for p in predictions]
         # get the sorted list of documents out
         return sorted(
-            zip(base_paths, doc_ids, self.predict_instance(instance)['logits']),
+            zip(base_paths, doc_ids, predictions),
             #zip(base_paths, doc_ids, scores),
             key=lambda x: x[-1], reverse=True)
 
