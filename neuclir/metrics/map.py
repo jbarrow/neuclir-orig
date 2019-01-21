@@ -1,3 +1,4 @@
+import copy
 import json
 import torch
 import numpy as np
@@ -9,16 +10,26 @@ from .utils import paired_sort
 
 @Metric.register('map')
 class MeanAveragePrecision(Metric):
-    def __init__(self, k: int = 1000):
+    def __init__(self, k: Optional[int] = 1000, corrections_file: Optional[str] = None):
         super(MeanAveragePrecision, self).__init__()
 
         self.k = k
-        self.aps = []
+
+        if corrections_file is not None:
+            with open(corrections_file) as fp:
+                self.missed = len([l for l in fp])
+                self.base_aps = [0.,] * self.missed
+        else:
+            self.base_aps = []
+
+        self.aps = copy.deepcopy(self.base_aps)
 
     def __call__(self, outputs: torch.Tensor,
                  targets: torch.LongTensor,
                  masks: Optional[torch.LongTensor] = None,
-                 relevant_ignored: Optional[torch.LongTensor] = None):
+                 relevant_ignored: Optional[torch.LongTensor] = None,
+                 irrelevant_ignored: Optional[torch.LongTensor] = None):
+
         if not len(outputs.shape) == len(targets.shape):
             targets = torch.unsqueeze(targets, 1)
             targets = torch.zeros_like(outputs).scatter_(1, targets, 1)
@@ -70,4 +81,4 @@ class MeanAveragePrecision(Metric):
 
     @overrides
     def reset(self):
-        self.aps = []
+        self.aps = copy.deepcopy(self.base_aps)

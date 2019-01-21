@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,6 +13,7 @@ from allennlp.modules.text_field_embedders import TextFieldEmbedder
 from allennlp.nn.util import get_text_field_mask
 from allennlp.modules.seq2vec_encoders.seq2vec_encoder import Seq2VecEncoder
 from allennlp.modules.seq2vec_encoders.boe_encoder import BagOfEmbeddingsEncoder
+from allennlp.training.metrics.metric import Metric
 
 from typing import Optional, Dict, Any
 from ..metrics import AQWV
@@ -48,12 +50,13 @@ class LeToRWrapper(Model):
                  #query_transformer: FeedForward,
                  scorer: FeedForward,
                  total_scorer: FeedForward,
+                 validation_metrics: Dict[str, Metric],
                  doc_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50),
                  query_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50),
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
-                 aqwv_corrections: Optional[str] = None,
-                 aqwv_test_corrections: Optional[str] = None,
+                 #aqwv_corrections: Optional[str] = None,
+                 #aqwv_test_corrections: Optional[str] = None,
                  predicting: Optional[bool] = False,
                  dropout: float = 0.) -> None:
         super(LeToRWrapper, self).__init__(vocab, regularizer)
@@ -76,17 +79,14 @@ class LeToRWrapper(Model):
         self.score_norm = nn.BatchNorm1d(2)
 
         if not predicting:
-            self.metrics = {
-                'accuracy': CategoricalAccuracy(),
-                'aqwv_2': AQWV(corrections_file=aqwv_corrections, cutoff=2, version='program'),
-                'aqwv_3': AQWV(corrections_file=aqwv_corrections, cutoff=3, version='program'),
-                'aqwv_teset': AQWV(corrections_file=aqwv_test_corrections, cutoff=2, version='program')
-            }
+            self.metrics = copy.deepcopy(validation_metrics)
+            self.metrics.update({
+                'accuracy': CategoricalAccuracy()
+            })
 
             self.training_metrics = {
                 True: ['accuracy'],
-                #False: ['accuracy']
-                False: ['aqwv_2', 'aqwv_3']
+                False: validation_metrics.keys()
             }
         else:
             self.metrics, self.training_metrics = {}, { True: [], False: [] }
@@ -95,7 +95,7 @@ class LeToRWrapper(Model):
         self.loss = nn.CrossEntropyLoss()
         initializer(self)
 
-    def get_metrics(self, reset: bool = True) -> Dict[str, float]:
+    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         return {
             metric_name: metric.get_metric(reset)
                 for metric_name, metric in self.metrics.items() }

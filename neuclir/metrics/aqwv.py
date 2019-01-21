@@ -28,8 +28,6 @@ class AQWV(Metric):
                     if q['ignored_relevant'] > 0:
                         self.q_ignored_relevant += 1
 
-        print(self.q_ignored_relevant, self.q_no_scores)
-
         self.miss = [1.,]*self.q_ignored_relevant
         self.false_alarm = [0.,]*(self.q_no_scores)
 

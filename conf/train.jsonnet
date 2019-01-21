@@ -59,8 +59,8 @@ local doc_encoder = if std.extVar('dan') then {
 };
 
 #local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
-local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
-#local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
+#local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
+local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
 
 {
   random_seed: random_seed, pytorch_seed: pytorch_seed, numpy_seed: numpy_seed,
@@ -77,8 +77,8 @@ local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_
   model: {
     type: 'letor_training',
     dropout: std.extVar('dropout'),
-    aqwv_corrections: Pathify(dataset + 'validation_scoring.json'),
-    aqwv_test_corrections: Pathify(dataset + 'test_scoring.json'),
+//    aqwv_corrections: ,
+//    aqwv_test_corrections: Pathify(dataset + 'test_scoring.json'),
 
 //    doc_field_embedder: Embedder(Pathify('data/embeddings/cca_soen.txt'), embedding_dims),
 //    doc_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
@@ -98,6 +98,16 @@ local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_
       hidden_dims: [1],
       activations: ['linear'],
       dropout: [0.0]
+    },
+
+    validation_metrics: {
+      map: {
+        type: 'map',
+        corrections_file: Pathify(dataset + 'validation_scoring.json'),
+        k: 1000
+        /* beta: 40,
+        cutoff: 2 */
+      }
     }
   },
   iterator: {

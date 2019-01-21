@@ -11,3 +11,18 @@ __pycache__/
 
 *.pyc
 *.docx
+*.pdf
+*.tar
+*.tar.gz
+
+template.sh
+test.py
+train.sh
+generate.sh
+generate_qrels.py
+get_queries.py
+.ftpconfig
+results.py
+sample_*.jsonnet
+
+neuclir/models/scorers

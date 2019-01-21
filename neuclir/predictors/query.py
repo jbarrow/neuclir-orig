@@ -23,7 +23,7 @@ class QueryPredictor(Predictor):
         predictions =  F.log_softmax(torch.tensor(self.predict_instance(instance)['logits']), dim=0)
         predictions = [p.item() - epsilon for p in predictions]
         #predictions = [d['scores'][0]['score'] for d in inputs['docs']]
-        predictions = sorted(zip(doc_ids, predictions), key=lambda x: x[-1], reverse=True)[:2]
+        predictions = sorted(zip(doc_ids, predictions), key=lambda x: x[-1], reverse=True)#[:2]
         # get the sorted list of documents out
         return {
             'query_id': inputs['query_id'],
