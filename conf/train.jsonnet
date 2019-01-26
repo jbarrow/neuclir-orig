@@ -12,7 +12,7 @@
 # Variables
 
 local use_scores = true;
-local embedding_dims = 50;
+local embedding_dims = std.extVar('embedding_dims');
 
 local random_seed = 2019;
 local pytorch_seed = random_seed * 10;
@@ -65,7 +65,7 @@ local query_encoder = {
 };
 
 #local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
-local Pathify(relative_path) = '/fs/clip-scratch/jdbarrow/neuclir/' + relative_path;
+local Pathify(relative_path) = '/fs/clip-scratch/jdbarrow/neuclir/neuclir/' + relative_path;
 #local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
 
 {
@@ -78,7 +78,7 @@ local Pathify(relative_path) = '/fs/clip-scratch/jdbarrow/neuclir/' + relative_p
   },
   evaluate_on_test: true,
   train_data_path: Pathify(dataset + 'train.json'),
-  validation_data_path: Pathify(dataset + 'validation_' std.extVar('lang') + .json'),
+  validation_data_path: Pathify(dataset + 'validation_' + std.extVar('lang') + '.json'),
   test_data_path: Pathify(dataset + 'test_' + std.extVar('lang') + '.json'),
   model: {
     type: 'letor_training',

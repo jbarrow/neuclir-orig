@@ -62,7 +62,7 @@ class LeToRWrapper(Model):
 
         self.use_batch_norm = use_batch_norm
         if self.use_batch_norm:
-            self.qd_norm = nn.BatchNorm1d(100)
+            self.qd_norm = nn.BatchNorm1d(self.doc_encoder.get_output_dim()*2)
             self.score_norm = nn.BatchNorm1d(2)
 
         self.use_attention = use_attention
