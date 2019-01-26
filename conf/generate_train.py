@@ -73,7 +73,8 @@ for dataset in glob.glob('datasets/*_irr/'):
                         'use_idfs': str(use_idf).lower(),
                         'doc_projection': str(False).lower(),
                         'ranking_loss': str(ranking_loss).lower(),
-                        'query_averaged': str(query_averaged).lower()
+                        'query_averaged': str(query_averaged).lower(),
+                        'embedding_dims': '50'
                     },
                     ext_vars={
                         'dataset': dataset,
@@ -120,7 +121,8 @@ for dataset in glob.glob('datasets/*_irr/'):
                     'use_idfs': str(use_idf).lower(),
                     'doc_projection': str(True).lower(),
                     'ranking_loss': str(ranking_loss).lower(),
-                    'query_averaged': str(query_averaged).lower()
+                    'query_averaged': str(query_averaged).lower(),
+                    'embedding_dims': '40'
                 },
                 ext_vars={
                     'dataset': dataset,
@@ -167,7 +169,8 @@ for dataset in glob.glob('datasets/*_irr_so/'):
                     'use_idfs': str(use_idf).lower(),
                     'doc_projection': str(True).lower(),
                     'ranking_loss': str(ranking_loss).lower(),
-                    'query_averaged': str(query_averaged).lower()
+                    'query_averaged': str(query_averaged).lower(),
+                    'embedding_dims': '40'
                 },
                 ext_vars={
                     'dataset': dataset,
