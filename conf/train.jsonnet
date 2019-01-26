@@ -21,13 +21,13 @@ local numpy_seed = pytorch_seed * 10;
 local dataset = std.extVar('dataset');
 
 # Helper Functions
-local Embedder(path, dim, trainable=false) = {
+local Embedder(path, dim, trainable=false, projection=false) = {
   tokens: {
     type: 'embedding',
     pretrained_file: path,
     embedding_dim: dim,
-    trainable: trainable
-  }
+    trainable: trainable,
+  } + if projection then { projection_dim: embedding_dims } else { }
 };
 
 local EmbeddingTransformer(dim, dropout=0.5, activation='relu') = {
@@ -40,10 +40,10 @@ local EmbeddingTransformer(dim, dropout=0.5, activation='relu') = {
 
 local Scorer(embedding_dim, lexical_input=false) = {
   local lexical_dims = if lexical_input then 1 else 0,
-  input_dim: embedding_dim * 2,# + 1,# + lexical_dims,
+  input_dim: embedding_dim * 2,# + lexical_dims,
   num_layers: 1,
   hidden_dims: [1],
-  activations: ['linear'],
+  activations: ['sigmoid'],
   dropout: [0.0]
 };
 
@@ -58,9 +58,15 @@ local doc_encoder = if std.extVar('dan') then {
   output_dim: embedding_dims
 };
 
+local query_encoder = {
+  type: 'boe',
+  embedding_dim: embedding_dims,
+  averaged: std.extVar('query_averaged')
+};
+
 #local Pathify(relative_path) = '/storage3/proj/joe/neuclir/' + relative_path;
-#local Pathify(relative_path) = '/fs/clip-material/jdbarrow/neuclir/' + relative_path;
-local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
+local Pathify(relative_path) = '/fs/clip-scratch/jdbarrow/neuclir/' + relative_path;
+#local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
 
 {
   random_seed: random_seed, pytorch_seed: pytorch_seed, numpy_seed: numpy_seed,
@@ -72,24 +78,21 @@ local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
   },
   evaluate_on_test: true,
   train_data_path: Pathify(dataset + 'train.json'),
-  validation_data_path: Pathify(dataset + 'validation.json'),
-  test_data_path: Pathify(dataset + 'test.json'),
+  validation_data_path: Pathify(dataset + 'validation_' std.extVar('lang') + .json'),
+  test_data_path: Pathify(dataset + 'test_' + std.extVar('lang') + '.json'),
   model: {
     type: 'letor_training',
     dropout: std.extVar('dropout'),
-//    aqwv_corrections: ,
-//    aqwv_test_corrections: Pathify(dataset + 'test_scoring.json'),
 
-//    doc_field_embedder: Embedder(Pathify('data/embeddings/cca_soen.txt'), embedding_dims),
-//    doc_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
-    doc_field_embedder: Embedder("(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt", embedding_dims),
-//    doc_transformer: EmbeddingTransformer(embedding_dims),
+    doc_field_embedder: Embedder(std.extVar('doc_embeddings'), embedding_dims, projection=std.extVar('doc_projection')),
     doc_encoder: doc_encoder,
 
-//    query_field_embedder: Embedder(Pathify('data/embeddings/cca.en.txt'), embedding_dims),
-//    query_field_embedder: Embedder(Pathify('data/embeddings/glove.6B.50d.txt'), embedding_dims),
-    query_field_embedder: Embedder("(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt", embedding_dims),
-//    query_transformer: EmbeddingTransformer(embedding_dims),
+    query_field_embedder: Embedder(std.extVar('query_embeddings'), embedding_dims),
+    query_encoder: query_encoder,
+
+    use_batch_norm: std.extVar('use_batch_norm'),
+    use_attention: std.extVar('use_attention'),
+    ranking_loss: std.extVar('ranking_loss'),
 
     scorer: Scorer(embedding_dims, use_scores),
     total_scorer: {
@@ -103,13 +106,15 @@ local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
     validation_metrics: {
       map: {
         type: 'map',
-        corrections_file: Pathify(dataset + 'validation_scoring.json'),
+        corrections_file: Pathify(dataset + 'validation_' + std.extVar('lang') + '_scoring.json'),
         k: 1000
-        /* beta: 40,
-        cutoff: 2 */
+      },
+      test_map: {
+        type: 'map',
+        corrections_file: Pathify(dataset + 'test_' + std.extVar('lang') + '_scoring.json'),
       }
     }
-  },
+  } + if std.extVar('use_idfs') then { idf_embedder: Embedder(std.extVar('idf_weights'), 1) } else {},
   iterator: {
     type: 'bucket',
     sorting_keys: [['docs', 'list_num_tokens']],
@@ -125,7 +130,7 @@ local Pathify(relative_path) = '/storage2/proj/joe/neuclir/' + relative_path;
     patience: 10,
     cuda_device: 0,
     grad_clipping: std.extVar('clipping'),
-    validation_metric: '+aqwv_2',
+    validation_metric: '+map',
     optimizer: {
       type: 'adam',
       lr: std.extVar('lr'),

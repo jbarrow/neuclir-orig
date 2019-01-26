@@ -18,27 +18,7 @@ from allennlp.training.metrics.metric import Metric
 from typing import Optional, Dict, Any
 from ..metrics import AQWV
 
-# class DocAverager():
-#     def __init__(self) -> None:
-#         super(DocAverager, self).__init__()
-#
-#     def forward(self,
-#                 tensor: torch.Tensor,
-#                 mask: torch.LongTensor):
-#         summed = tensor.sum(2)
-#         return summed / mask.sum(2).float().unsqueeze(2).repeat(1, 1, summed.shape[2])
-#
-
-# class QueryAverager(nn.Module):
-#     def __init__(self) -> None:
-#         super(QueryAverager, self).__init__()
-#
-#     def forward(self,
-#                 tensor: torch.Tensor,
-#                 mask: torch.LongTensor):
-#         summed = tensor.sum(1)
-#         return summed / mask.sum(1).float().unsqueeze(1).repeat(1, summed.shape[1])
-
+from allennlp.modules.attention.cosine_attention import CosineAttention
 
 @Model.register('letor_training')
 class LeToRWrapper(Model):
@@ -51,10 +31,14 @@ class LeToRWrapper(Model):
                  scorer: FeedForward,
                  total_scorer: FeedForward,
                  validation_metrics: Dict[str, Metric],
+                 use_attention: bool = True,
+                 use_batch_norm: bool = True,
+                 ranking_loss: bool = False,
                  doc_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50),
                  query_encoder: Seq2VecEncoder = BagOfEmbeddingsEncoder(50),
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
+                 idf_embedder: Optional[TextFieldEmbedder] = None,
                  #aqwv_corrections: Optional[str] = None,
                  #aqwv_test_corrections: Optional[str] = None,
                  predicting: Optional[bool] = False,
@@ -63,6 +47,7 @@ class LeToRWrapper(Model):
 
         self.query_field_embedder = query_field_embedder
         self.doc_field_embedder = doc_field_embedder
+        self.idf_embedder = idf_embedder
         #self.document_transformer = doc_transformer
         #self.query_transformer = query_transformer
 
@@ -75,8 +60,14 @@ class LeToRWrapper(Model):
         self.regularizer = regularizer
         self.dropout = nn.Dropout(dropout)
 
-        self.qd_norm = nn.BatchNorm1d(100)
-        self.score_norm = nn.BatchNorm1d(2)
+        self.use_batch_norm = use_batch_norm
+        if self.use_batch_norm:
+            self.qd_norm = nn.BatchNorm1d(100)
+            self.score_norm = nn.BatchNorm1d(2)
+
+        self.use_attention = use_attention
+        if self.use_attention:
+            self.attn = CosineAttention()
 
         if not predicting:
             self.metrics = copy.deepcopy(validation_metrics)
@@ -91,8 +82,11 @@ class LeToRWrapper(Model):
         else:
             self.metrics, self.training_metrics = {}, { True: [], False: [] }
 
-        #self.loss = nn.MarginRankingLoss(margin=0.5)
-        self.loss = nn.CrossEntropyLoss()
+        self.ranking_loss = ranking_loss
+        if self.ranking_loss:
+            self.loss = nn.MarginRankingLoss(margin=0.5)
+        else:
+            self.loss = nn.CrossEntropyLoss()
         initializer(self)
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
@@ -110,6 +104,20 @@ class LeToRWrapper(Model):
 
         _, num_docs, _ = docs['tokens'].shape
 
+        # (batch_size, query_length)
+        qs_mask = get_text_field_mask(query)
+        # (batch_size, query_length, embedding_dim)
+        qs_embedded = self.query_field_embedder(query)
+        #qs_idfs = self.idf_embedder(query)
+        # (batch_size, query_length, transform_dim)
+        #qs_transformed = self.query_transformer(qs_embedded)
+        #qs_transformed = self.query_norm(qs_encoded)
+        qs_transformed = qs_embedded# * qs_idfs
+        # (batch_size, transform_dim)
+        qs_encoded = self.query_encoder(qs_transformed, qs_mask)
+        # (batch_size, num_docs, transform_dim)
+        qs_encoded = qs_encoded.unsqueeze(1).repeat(1, num_docs, 1)
+
         # label masks
         ls_mask = get_text_field_mask(docs)
         # (batch_size, num_docs, doc_length)
@@ -120,35 +128,38 @@ class LeToRWrapper(Model):
         #ds_transformed = self.document_transformer(ds_embedded)
         #ds_transformed = self.doc_norm(ds_transformed)
         ds_transformed = ds_embedded
+        if self.idf_embedder is not None:
+            # (batch_size, num_docs, doc_length, 1)
+            ds_idfs = self.idf_embedder(docs)
+            ds_transformed = ds_transformed * ds_idfs
+
         batch_size, num_docs, doc_length, transform_dim = ds_transformed.shape
         # (batch_size * num_docs, doc_length, transform_dim)
         ds_transformed = ds_transformed.view(batch_size*num_docs, doc_length, transform_dim)
         ds_mask = ds_mask.view(batch_size*num_docs, doc_length)
+
+        if self.use_attention:
+            qs_encoded = qs_encoded.view(batch_size*num_docs, -1)
+            attn = self.attn(qs_encoded, ds_transformed, ds_mask).unsqueeze(2)
+            qs_encoded = qs_encoded.view(batch_size, num_docs, -1)
+            ds_transformed = ds_transformed * attn
+
         # (batch_size * num_docs, transform_dim)
         ds_encoded = self.doc_encoder(ds_transformed, ds_mask)
         # (batch_size, num_docs, transform_dim)
         ds_encoded = ds_encoded.view(batch_size, num_docs, transform_dim)
 
-        # (batch_size, query_length)
-        qs_mask = get_text_field_mask(query)
-        # (batch_size, query_length, embedding_dim)
-        qs_embedded = self.query_field_embedder(query)
-        # (batch_size, query_length, transform_dim)
-        #qs_transformed = self.query_transformer(qs_embedded)
-        #qs_transformed = self.query_norm(qs_encoded)
-        qs_transformed = qs_embedded
-        # (batch_size, transform_dim)
-        qs_encoded = self.query_encoder(qs_transformed, qs_mask)
-        # (batch_size, num_docs, transform_dim)
-        qs_encoded = qs_encoded.unsqueeze(1).repeat(1, num_docs, 1)
 
         # (batch_size, num_docs, transform_dim * 2 + 1)
         #qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded, F.cosine_similarity(ds_encoded, qs_encoded, dim=2).unsqueeze(2)], dim=2)
         qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded], dim=2)
+        #qd = torch.cat([qs_encoded - ds_encoded, qs_encoded * ds_encoded, scores], dim=2)
 
-        qd = qd.view(batch_size*num_docs, -1)
-        qd = self.qd_norm(qd)
-        qd = qd.view(batch_size, num_docs, -1)
+        if self.use_batch_norm:
+            qd = qd.view(batch_size*num_docs, -1)
+            qd = self.qd_norm(qd)
+            qd = qd.view(batch_size, num_docs, -1)
+
         qd = self.dropout(qd)
 
         semantic_scores = self.scorer(qd)
@@ -156,13 +167,15 @@ class LeToRWrapper(Model):
         if scores is not None:
             # (batch_size, num_docs, 2)
             semantic_scores = torch.cat([semantic_scores, scores], dim=2)
-            semantic_scores = semantic_scores.view(batch_size*num_docs, -1)
-            semantic_scores = self.score_norm(semantic_scores)
-            semantic_scores = semantic_scores.view(batch_size, num_docs, -1)
+
+            if self.use_batch_norm:
+                semantic_scores = semantic_scores.view(batch_size*num_docs, -1)
+                semantic_scores = self.score_norm(semantic_scores)
+                semantic_scores = semantic_scores.view(batch_size, num_docs, -1)
 
         # (batch_size, num_docs)
         logits = self.total_scorer(semantic_scores)
-        #logits = self.scorer_norm(logits)
+        # logits = semantic_scores
         logits = logits.squeeze(2)
         # logits = self.scorer(scores).squeeze(2)
         # scores = scores.squeeze(2)
@@ -174,8 +187,10 @@ class LeToRWrapper(Model):
             # filter out to only the metrics we care about
             if self.training:
                 #print(labels.float().shape, scores.shape)
-                #loss = self.loss(logits[:, 0], logits[:, 1], labels.float()*-2.+1.)
-                loss = self.loss(logits, labels.squeeze(-1).long())
+                if self.ranking_loss:
+                    loss = self.loss(logits[:, 0], logits[:, 1], labels.float()*-2.+1.)
+                else:
+                    loss = self.loss(logits, labels.squeeze(-1).long())
                 self.metrics['accuracy'](logits, labels.squeeze(-1))
             else:
                # at validation time, we can't compute a proper loss

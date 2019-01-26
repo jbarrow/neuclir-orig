@@ -1,10 +1,9 @@
-from allennlp.data.tokenizers import Tokenizer, WordTokenizer
-from allennlp.data.tokenizers.word_filter import StopwordFilter
-from sklearn.model_selection import train_test_split
-from scipy.misc import logsumexp
-from collections import defaultdict
 from typing import List, Tuple, Callable, Dict, Set, Any, Union
+from allennlp.data.tokenizers.word_filter import StopwordFilter
+from allennlp.data.tokenizers import Tokenizer, WordTokenizer
+from collections import defaultdict
 from scipy.special import logsumexp
+from scipy.misc import logsumexp
 from functools import reduce
 from shutil import copyfile
 from tqdm import tqdm
@@ -26,6 +25,7 @@ QueryID = str
 def dict_from_paths(paths: List[Path], strip_file: bool = True) -> Dict[str, Path]:
     output = {}
     for path in paths:
+        print(path, ': ', len(glob.glob(path)))
         for f in glob.glob(path):
             filename = os.path.basename(f)
             #filename = os.path.splitext(filename)[0] if strip_file else filename
@@ -37,13 +37,27 @@ def docs_from_paths(paths: List[Path], strip_file: bool = True, tokenizer: Token
     docs = dict_from_paths(paths, strip_file)
     texts = []
 
-    for doc, path in docs.items():
+    for doc, path in tqdm(docs.items()):
         with open(path) as fp:
             texts.append((doc, fp.read()))
+
     tokenized = tokenizer.batch_tokenize([t[1] for t in texts])
     tokenized = [[w.orth_ for w in t] for t in tokenized]
 
     return {doc: tokens for (doc, _), tokens in zip(texts, tokenized)}
+
+def json_read_tokens(filename: Path, flatten: bool = True) -> List[str]:
+    tokens = []
+    with open(filename) as fp:
+        for line in fp:
+            l = json.loads(line)
+            ts = [w['word'].lower() for w in l[0]] if len(l) > 0 else []
+            tokens.extend(ts) if flatten else tokens.append(ts)
+    return tokens
+
+def json_docs_from_paths(paths: List[Path], strip_file: bool = True) -> Dict[str, List[str]]:
+    docs = dict_from_paths(paths, strip_file)
+    return { doc: json_read_tokens(path) for doc, path in tqdm(docs.items())}
 
 # normalization functions
 def flatten(l_of_ls):
@@ -55,15 +69,28 @@ def sto_normalization(df: pd.DataFrame) -> pd.DataFrame:
     df.score = df.score.values - logsumexp(df.score.values)
     return df
 
+def zero_one_normalization(df: pd.DataFrame) -> pd.DataFrame:
+    if df.score.values.dtype != 'float64':
+        return df
+    df.score = df.score.values - min(df.score.values)
+    if max(df.score.values) > 0:
+        df.score = df.score.values / max(df.score.values)
+    return df
+
 def no_normalization(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 class DatasetGenerator(object):
-    def __init__(self, name: str, params: Dict[str, Any], output: Path, systems: List[str] = []):
+    def __init__(self,
+                 name: str,
+                 params: Dict[str, Any],
+                 output: Path, systems: List[str] = [],
+                 f_normalization: Callable[[pd.DataFrame], pd.DataFrame] = no_normalization) -> None:
         self.params = params
         self.output = output
         self.name = name
         self.systems = systems
+        self.f_normalization = f_normalization
 
     def read_scores_file(self, file: Path) -> Tuple[str, pd.DataFrame]:
         """
@@ -112,19 +139,6 @@ class DatasetGenerator(object):
             query = json.load(fp)
         return query['english'][query_type].strip().split()
 
-    def read_tokens(self, filename: Path, flatten: bool = True, is_json: bool = True) -> List[str]:
-        tokens = []
-        with open(filename) as fp:
-            for line in fp:
-                ts = []
-                if is_json:
-                    l = json.loads(line)
-                    ts = [w['word'].lower() for w in l[0]] if len(l) > 0 else []
-                else:
-                    ts = line.strip().lower().split()
-                tokens.extend(ts) if flatten else tokens.append(ts)
-        return tokens
-
     def read_judgements(self, file: Path) -> pd.DataFrame:
         logging.log(logging.INFO, f'  - Reading in judgements from {file}')
         judgements = pd.read_csv(file, sep='\t')
@@ -137,7 +151,7 @@ class DatasetGenerator(object):
             df = scores[system]
 
             found = df[df.document_id == doc_id]
-            score = -10.
+            score = 0.
             if len(found) == 0 and len(df) > 0:
                 score = min(df.score)
             elif len(found) > 0:
@@ -191,19 +205,21 @@ class DatasetGenerator(object):
         else:
             tokenizer = WordTokenizer()
 
-        self.docs = docs_from_paths(self.params['docs'], tokenizer)
+        if 'doctype' in self.params and self.params['doctype'] == 'json':
+            self.docs = json_docs_from_paths(self.params['docs'])
+        else:
+            self.docs = docs_from_paths(self.params['docs'], tokenizer=tokenizer)
         logging.log(logging.INFO, f' * Found {len(self.docs)} total docs')
         # # impose an order on the systems
         # self.systems = sorted(self.params['scores'].keys())
 
-    def normalize(self, queries: Dict[str, Dict[str, pd.DataFrame]],
-                  f_normalization: Callable[[pd.DataFrame], pd.DataFrame] = sto_normalization) -> Dict[str, Dict[str, pd.DataFrame]]:
+    def normalize(self, queries: Dict[str, Dict[str, pd.DataFrame]]) -> Dict[str, Dict[str, pd.DataFrame]]:
         normalized = {}
 
         for query, scores in queries.items():
             normalized[query] = {}
             for system, df in scores.items():
-                normalized[query][system] = f_normalization(df)
+                normalized[query][system] = self.f_normalization(df)
 
         return normalized
 
@@ -239,7 +255,7 @@ class PairedDatasetGenerator(DatasetGenerator):
                 query_scores = self.scores[query]
                 # if we choose a sampling strategy that requires it
                 possible = set(self.docs.keys()) - set(df.doc_id)
-                if self.params['strategy'] == 'difficult':
+                if self.params['strategy'] == 'difficult' and random.random() <= self.params['p_difficult']:
                     # exclude relevant docs
                     tmp_possible = set(query_scores[self.params['sample_system']].document_id) - set(df.doc_id)
                     if len(tmp_possible) >= self.params['n_irrelevant']:
@@ -362,11 +378,11 @@ class RankingDatasetGenerator(DatasetGenerator):
             relevant = self.judgements[self.judgements['query_id'] == query]
 
             scored_docs = []
-            for doc_id, path in self.docs.items():
+            for doc_id, doc in self.docs.items():
                 scored_docs.append({
                     'document_id': doc_id,
                     #'text': ' '.join(self.read_tokens(path, is_json=False)),
-                    'text': ' '.join(self.docs[path]),
+                    'text': ' '.join(doc),
                     'scores': self.get_scores(dfs, doc_id),
                     'relevant': self.get_relevant(relevant, doc_id)
                 })
@@ -387,18 +403,27 @@ _dataset_dispatch = {
     'ranking': RankingDatasetGenerator
 }
 
+_normalization_dispatch = {
+    'sto': sto_normalization,
+    'none': no_normalization,
+    'zero_one': zero_one_normalization
+}
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print('Usage:\npython -m neuclir.datasets.sample [CONFIG]')
         sys.exit(-1)
+
 
     settings = json.load(open(sys.argv[1]))
     # set up the logger
     logging_level = settings.pop('logging', 'info').upper()
     logging.basicConfig(level=logging.getLevelName(logging_level))
 
+    f_normalization = _normalization_dispatch[settings['normalization']]
+
     for name, dataset in settings['datasets'].items():
-        generator = _dataset_dispatch[dataset['type']](name, dataset, settings['output'], settings['systems'])
+        generator = _dataset_dispatch[dataset['type']](name, dataset, settings['output'], settings['systems'], f_normalization)
         generator.sample_dataset()
 
     # copy over the selected files

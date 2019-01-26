@@ -15,20 +15,36 @@ import os
 # lr: float,
 # l2: float,
 # dataset: str
+# lang: str
+# ranking_loss: bool
+# use_attention: bool
+# use_batch_norm: bool
+# query_embeddings: str
+# doc_embeddings: str
 
-learning_rates = [0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03]
-l2s = [0., 0.0001, 0.001, 0.01, 0.1]
-dropouts = [0., 0.1, 0.2, 0.3, 0.4, 0.5]
+learning_rates = [0.001, 0.003, 0.01]
+l2s = [0., 0.0001, 0.001, 0.01]
+dropouts = [0., 0.1, 0.2, 0.3]
 averageds = [True, False]
-num_filters = [5, 10, 15, 20, 25, 30, 35, 40]
-batch_sizes = [8, 12, 16]
-clippings = [0.25, 1., 5.]
+num_filters = [20, 25, 30, 35, 40]
+batch_sizes = [8, 12]
+clippings = [0.25, 1., 5.],
+use_idfs = [True, False]
+use_attentions = [True, False]
+use_batch_norms = [True, False]
+ranking_losses = [True, False]
+dans = [True, False]
 
 jsonnet_str = open('conf/train.jsonnet').read()
 
-for dataset in glob.glob('datasets/*/'):
-    for dan in [True, False]:
-        for i in range(3):
+for dataset in glob.glob('datasets/*_irr/'):
+    for eval_language in ['tl', 'so']:
+        for i in range(1):
+            dan = random.sample(dans, k=1)[0]
+            use_idf = random.sample(use_idfs, k=1)[0]
+            use_attention = random.sample(use_attentions, k=1)[0]
+            use_batch_norm = random.sample(use_batch_norms, k=1)[0]
+            ranking_loss = random.sample(ranking_losses, k=1)[0]
             learning_rate = random.sample(learning_rates, k=1)[0]
             l2 = random.sample(l2s, k=1)[0]
             dropout = random.sample(dropouts, k=1)[0]
@@ -39,7 +55,7 @@ for dataset in glob.glob('datasets/*/'):
 
             d = os.path.basename(os.path.normpath(dataset))
 
-            with open(f'runs/{d}_dan-{dan}_run-{i}.json', 'w') as fp:
+            with open(f'runs/{d}_run-{i}.json', 'w') as fp:
                 json_str = _jsonnet.evaluate_snippet(
                     "conf/train.jsonnet", jsonnet_str,
                     ext_codes={
@@ -51,6 +67,15 @@ for dataset in glob.glob('datasets/*/'):
                         'clipping': str(clipping),
                         'lr': str(learning_rate),
                         'l2': str(l2),
+                        'lang': eval_lang,
+                        'use_batch_norm': str(use_batch_norm).lower(),
+                        'use_attention': str(use_attention).lower(),
+                        'use_idfs': str(use_idf).lower(),
+                        'idf_weights': 'en_' + eval_lang + 'idf.txt',
+                        'query_embeddings': "(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt",
+                        'doc_embeddings': "(http://nlp.stanford.edu/data/glove.6B.zip)#glove.6B.50d.txt",
+                        'doc_projection': str(False).lower(),
+                        'ranking_loss': str(ranking_loss).lower()
                     },
                     ext_vars={
                         'dataset': dataset
